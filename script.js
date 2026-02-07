@@ -320,37 +320,134 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initial Render
     renderSidebarPlaylists();
 
-    // 5. Add Song to Playlist Function
+    // 5. Add Song to Playlist Function (with Modal)
     function addToPlaylist(video) {
+        const modal = document.getElementById("playlist-modal");
+        const modalList = document.getElementById("modal-playlist-list");
+        const closeBtn = document.querySelector(".close-modal");
+
+        if (!modal || !modalList) return;
+
         const playlistNames = Object.keys(playlists);
         if (playlistNames.length === 0) {
-            alert("No playlists found. Create one first!");
+            alert("No playlists created yet. Create one in the sidebar!");
             return;
         }
 
-        // Simple prompt for now - could be a modal
-        let promptText = "Type the name of the playlist to add to:\n";
-        playlistNames.forEach(name => promptText += `- ${name}\n`);
+        modalList.innerHTML = ""; // Clear previous options
 
-        const selectedName = prompt(promptText);
-        if (selectedName && playlists[selectedName]) {
-            // Check duplicates
-            const exists = playlists[selectedName].find(s => s.id === video.id);
-            if (exists) {
-                alert("Song already in playlist!");
-            } else {
-                playlists[selectedName].push(video);
-                savePlaylists();
-                alert(`Added to ${selectedName}`);
+        playlistNames.forEach(name => {
+            const btn = document.createElement("button");
+            btn.innerText = name;
+            btn.style.padding = "10px";
+            btn.style.backgroundColor = "#1db954";
+            btn.style.border = "none";
+            btn.style.borderRadius = "20px";
+            btn.style.color = "white";
+            btn.style.cursor = "pointer";
+            btn.style.fontWeight = "bold";
+
+            btn.onclick = () => {
+                // Check duplicates
+                const exists = playlists[name].find(s => s.id === video.id);
+                if (exists) {
+                    alert("Song already in this playlist!");
+                } else {
+                    playlists[name].push(video);
+                    savePlaylists();
+                    // alert(`Added to ${name}`); // Optional feedback
+                    modal.style.display = "none"; // Close modal
+                }
+            };
+            modalList.appendChild(btn);
+        });
+
+        modal.style.display = "block";
+
+        closeBtn.onclick = function () {
+            modal.style.display = "none";
+        }
+
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
             }
-        } else if (selectedName) {
-            alert("Playlist not found.");
         }
     }
 
-    // 6. Show Playlist View
+    // --- Dynamic Home Content ---
+    async function loadHomeContent() {
+        const trendingContainer = document.querySelector("#section-trending .cards");
+        const topMixesContainer = document.querySelector("#section-top-mixes .cards");
+
+        if (!trendingContainer || !topMixesContainer) return;
+
+        // Fetch Trending
+        try {
+            const res1 = await fetch(`http://localhost:3000/search?q=Top+Songs+2024`);
+            const trendingVideos = await res1.json();
+            renderCardsToContainer(trendingVideos.slice(0, 10), trendingContainer);
+        } catch (e) {
+            console.error("Failed to load trending", e);
+        }
+
+        // Fetch Top Mixes
+        try {
+            const res2 = await fetch(`http://localhost:3000/search?q=Top+Music+Mixes`);
+            const mixVideos = await res2.json();
+            renderCardsToContainer(mixVideos.slice(0, 10), topMixesContainer);
+        } catch (e) {
+            console.error("Failed to load mixes", e);
+        }
+    }
+
+    function renderCardsToContainer(videos, container) {
+        container.innerHTML = "";
+        videos.forEach(video => {
+            const card = document.createElement("div");
+            card.className = "card-result";
+            card.style.backgroundColor = "#181818";
+            // card.style.padding = "16px"; // Already in class, but ensuring
+            card.style.minWidth = "160px"; // Needed for horizontal scroll
+            card.style.maxWidth = "160px";
+            card.style.borderRadius = "8px";
+            card.style.padding = "16px";
+            card.style.cursor = "pointer";
+            card.style.transition = "background-color 0.3s";
+            card.style.position = "relative";
+            card.style.flexShrink = "0"; // Don't shrink in flex container
+
+            card.onmouseover = () => card.style.backgroundColor = "#282828";
+            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            card.innerHTML = `
+                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
+                <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: white;">${video.title}</h3>
+                <p style="font-size: 12px; color: #a7a7a7;">${video.author}</p>
+                 <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-weight:bold;">+</button>
+            `;
+
+            // Hover effects for button
+            const addBtn = card.querySelector(".add-btn");
+            card.addEventListener("mouseenter", () => addBtn.style.display = "block");
+            card.addEventListener("mouseleave", () => addBtn.style.display = "none");
+
+            addBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                addToPlaylist(video);
+            });
+
+            card.addEventListener("click", () => playVideo(video));
+            container.appendChild(card);
+        });
+    }
+
+    // Run on startup
+    loadHomeContent();
+
+    // 6. Show Playlist View (Updated to use new render helper if desired, but kept separate for now)
     function showPlaylist(name) {
-        showSearch(); // Reuse search view container for now as "Custom View"
+        showSearch();
         if (!searchView) return;
 
         searchView.innerHTML = `<h2 style='margin: 20px;'>Playlist: ${name}</h2>`;
@@ -368,8 +465,10 @@ document.addEventListener("DOMContentLoaded", () => {
         cardsContainer.style.gap = "20px";
         cardsContainer.style.padding = "0 20px";
 
+        // Reusing similar logic but vertical flow is fine here
         songs.forEach((video, index) => {
             const card = document.createElement("div");
+            // ... (Same card style as before) ...
             card.className = "card-result";
             card.style.backgroundColor = "#181818";
             card.style.padding = "16px";
@@ -377,19 +476,17 @@ document.addEventListener("DOMContentLoaded", () => {
             card.style.width = "180px";
             card.style.cursor = "pointer";
             card.style.transition = "background-color 0.3s";
-            card.style.position = "relative"; // For delete button
+            card.style.position = "relative";
 
             card.onmouseover = () => card.style.backgroundColor = "#282828";
             card.onmouseout = () => card.style.backgroundColor = "#181818";
 
-            // Click entire card to play
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
                 <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
                 <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
             `;
 
-            // Play click
             card.addEventListener("click", (e) => {
                 playVideo(video);
             });

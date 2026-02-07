@@ -77,114 +77,86 @@
                 <div id="search-view" style="display: none; padding-top: 20px;"></div>
 
                 <div id="home-view">
-                    <div class="recentlyplayed">
-                        <h2>Recently played</h2>
-                        <div class="cards">
-                            <div class="card1 cardself">
-                                <img src="./assets/card2img.jpeg" /><br>
-                                <p class="songname">Mahiye Jinna So...</p>
-                                <p class="songartist">Spotify</p>
+                    <!-- Dynamic Content will be loaded here -->
+                    <div id="home-sections">
+                        <div class="section-container" id="section-trending">
+                            <h2>Trending Now</h2>
+                            <div class="cards"
+                                style="display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px;">
+                                <!-- Content -->
                             </div>
                         </div>
-                    </div>
-
-                    <div class="trysomethingelse">
-                        <h2>Try something else</h2>
-                        <div class="cards">
-                            <div class="card1 cardself">
-                                <img src="./assets/card3img.jpeg" /><br>
-                                <p class="songname">Mere paas tum...</p>
-                                <p class="songartist">Here is your emotion</p>
-                            </div>
-
-                            <div class="card2 cardself">
-                                <img src="./assets/card4img.jpeg" /><br>
-                                <p class="songname">Mere paas tum...</p>
-                                <p class="songartist">Here is your emotion</p>
-                            </div>
-
-                            <div class="card3 cardself">
-                                <img src="./assets/card2img.jpeg" /><br>
-                                <p class="songname">Mere paas tum...</p>
-                                <p class="songartist">Here is your emotion</p>
-                            </div>
-
-                            <div class="card4 cardself">
-                                <img src="./assets/card3img.jpeg" /><br>
-                                <p class="songname">Mere paas tum...</p>
-                                <p class="songartist">Here is your emotion</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="featuredcharts">
-                        <h2>Featured charts</h2>
-                        <div class="cards">
-                            <div class="card1 cardself">
-                                <img src="./assets/card1img.jpeg" /><br>
-                                <p class="songname">Top 50 - Global</p>
-                                <p class="songartist">Spotify</p>
-                            </div>
-
-                            <div class="card2 cardself">
-                                <img src="./assets/card5img.jpeg" /><br>
-                                <p class="songname">Top songs - Global</p>
-                                <p class="songartist">Spotify</p>
-                            </div>
-
-                            <div class="card3 cardself">
-                                <img src="./assets/card6img.jpeg" /><br>
-                                <p class="songname">Top songs - India</p>
-                                <p class="songartist">Spotify</p>
+                        <div class="section-container" id="section-top-mixes">
+                            <br>
+                            <h2>Top Mixes</h2>
+                            <div class="cards"
+                                style="display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px;">
+                                <!-- Content -->
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="footer">
-                <div class="line"></div>
+            <!-- Playlist Modal -->
+            <div id="playlist-modal" class="modal"
+                style="display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8);">
+                <div class="modal-content"
+                    style="background-color: #282828; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 300px; border-radius: 10px; color: white;">
+                    <span class="close-modal"
+                        style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+                    <h3>Add to Playlist</h3>
+                    <div id="modal-playlist-list"
+                        style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Playlist buttons will go here -->
+                    </div>
+                </div>
             </div>
-
         </div>
 
-        <div class="playerdiv">
-            <div class="playingsong">
-                <div class="playingsongimg">
-                    <img src="./assets/card2img.jpeg" />
-                </div>
-                <div class="playingsonginfo">
-                    <p class="p1"><a href="#">Mahiye Jinna Sohna By spotify Player</a></p>
-                    <p class="p2"><a href="#" class="opacity">An Emotional track of heart</a></p>
-                </div>
-                <div class="plusicon"><i class="fa-solid fa-circle-plus opacity"></i></div>
-            </div>
-            <div class="songcontrols">
+        <div class="footer">
+            <div class="line"></div>
+        </div>
 
-                <div class="controls">
-                    <img src="./assets/player_icon1.png" class="opacity" />
-                    <i class="fa-solid fa-rotate-left opacity"></i>
-                    <img src="./assets/player_icon2.png" class="opacity" />
-                    <img src="./assets/player_icon3.png" class="play" />
-                    <img src="./assets/player_icon4.png" class="opacity" />
-                    <i class="fa-solid fa-rotate-right opacity"></i>
-                </div>
+    </div>
 
-                <div class="musictrack">
-                    <span>0:00</span>
-                    <input type="range" min="0" max="100" class="track" />
-                    <span>3:34</span>
-                </div>
+    <div class="playerdiv">
+        <div class="playingsong">
+            <div class="playingsongimg">
+                <img src="./assets/card2img.jpeg" />
             </div>
-            <div class="songoptions">
-                <i class="fa-solid fa-display opacity"></i>
-                <i class="fa-solid fa-list opacity"></i>
-                <i class="fa-solid fa-gamepad opacity"></i>
-                <i class="fa-solid fa-volume-low opacity"></i>
-                <input type="range" min="0" max="15" />
-                <i class="fa-solid fa-laptop-file opacity"></i>
+            <div class="playingsonginfo">
+                <p class="p1"><a href="#">Mahiye Jinna Sohna By spotify Player</a></p>
+                <p class="p2"><a href="#" class="opacity">An Emotional track of heart</a></p>
+            </div>
+            <div class="plusicon"><i class="fa-solid fa-circle-plus opacity"></i></div>
+        </div>
+        <div class="songcontrols">
+
+            <div class="controls">
+                <img src="./assets/player_icon1.png" class="opacity" />
+                <i class="fa-solid fa-rotate-left opacity"></i>
+                <img src="./assets/player_icon2.png" class="opacity" />
+                <img src="./assets/player_icon3.png" class="play" />
+                <img src="./assets/player_icon4.png" class="opacity" />
+                <i class="fa-solid fa-rotate-right opacity"></i>
+            </div>
+
+            <div class="musictrack">
+                <span>0:00</span>
+                <input type="range" min="0" max="100" class="track" />
+                <span>3:34</span>
             </div>
         </div>
+        <div class="songoptions">
+            <i class="fa-solid fa-display opacity"></i>
+            <i class="fa-solid fa-list opacity"></i>
+            <i class="fa-solid fa-gamepad opacity"></i>
+            <i class="fa-solid fa-volume-low opacity"></i>
+            <input type="range" min="0" max="15" />
+            <i class="fa-solid fa-laptop-file opacity"></i>
+        </div>
+    </div>
 
     </div>
     <script src="script.js"></script>
