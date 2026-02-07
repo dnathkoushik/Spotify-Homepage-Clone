@@ -164,4 +164,55 @@ document.addEventListener("DOMContentLoaded", () => {
     playerDiv.style.position = "absolute";
     playerDiv.style.top = "-9999px"; // Hide it
     document.body.appendChild(playerDiv);
+
+    // Capture initial content for "Home" functionality
+    const mainContentDiv = document.querySelector(".content");
+    const initialContent = mainContentDiv.innerHTML;
+
+    // --- Sidebar Implementations ---
+
+    // 1. Home Button
+    const homeBtn = document.getElementById("home-btn");
+    homeBtn.addEventListener("click", () => {
+        mainContentDiv.innerHTML = initialContent;
+    });
+
+    // 2. Search Button
+    const searchBtn = document.getElementById("search-btn");
+    searchBtn.addEventListener("click", () => {
+        if (searchInput) {
+            searchInput.focus();
+        }
+    });
+
+    // 3. Create Playlist & Plus Icon
+    const createPlaylistBtn = document.getElementById("create-playlist-btn");
+    const plusIcon = document.getElementById("plus-icon");
+    const playlistList = document.getElementById("playlist-list");
+
+    function createPlaylist() {
+        const name = prompt("Enter a name for your playlist:");
+        if (name) {
+            const playlistItem = document.createElement("div");
+            playlistItem.style.padding = "10px";
+            playlistItem.style.cursor = "pointer";
+            playlistItem.style.opacity = "0.8";
+            playlistItem.style.color = "white";
+            playlistItem.style.fontSize = "0.9rem";
+            playlistItem.innerText = name;
+
+            playlistItem.onmouseover = () => playlistItem.style.opacity = "1";
+            playlistItem.onmouseout = () => playlistItem.style.opacity = "0.8";
+
+            playlistList.appendChild(playlistItem);
+
+            // Optional: Hide the "Create your first playlist" card if desired, 
+            // but usually Spotify keeps the 'create' button around or moves it.
+            // For now, we just append to the list.
+        }
+    }
+
+    if (createPlaylistBtn) createPlaylistBtn.addEventListener("click", createPlaylist);
+    if (plusIcon) plusIcon.addEventListener("click", createPlaylist);
+
 });
