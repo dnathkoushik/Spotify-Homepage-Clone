@@ -258,8 +258,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const playBtn = document.querySelector(".controls .play");
     if (playBtn) {
         playBtn.addEventListener("click", () => {
-            if (!player) return;
-            const state = player.getPlayerState();
+            if (!window.player) return;
+            const state = window.player.getPlayerState();
             /* 
                state can be:
                -1 (unstarted)
@@ -270,9 +270,9 @@ document.addEventListener("DOMContentLoaded", () => {
                5 (video cued)
             */
             if (state === YT.PlayerState.PLAYING) {
-                player.pauseVideo();
+                window.player.pauseVideo();
             } else {
-                player.playVideo();
+                window.player.playVideo();
             }
         });
     }
@@ -280,10 +280,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const progressBar = document.querySelector(".musictrack .track");
     if (progressBar) {
         progressBar.addEventListener("input", (e) => {
-            if (!player) return;
-            const duration = player.getDuration();
+            if (!window.player) return;
+            const duration = window.player.getDuration();
             const seekTo = (e.target.value / 100) * duration;
-            player.seekTo(seekTo, true);
+            window.player.seekTo(seekTo, true);
         });
     }
 
