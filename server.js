@@ -22,17 +22,21 @@ app.get("/search", async (req, res) => {
         if (!query) {
             return res.status(400).json({ error: "No query provided" });
         }
-        
+
         const results = await ytSearch(query);
+        if (!results || !results.videos) {
+            throw new Error("No videos found");
+        }
+
         const videos = results.videos.slice(0, 20).map(video => ({
             id: video.videoId,
             title: video.title,
             thumbnail: video.thumbnail,
-            author: video.author.name,
+            author: video.author ? video.author.name : "Unknown",
             duration: video.timestamp,
             views: video.views
         }));
-        
+
         res.json(videos);
     } catch (error) {
         console.error("Search error:", error);
