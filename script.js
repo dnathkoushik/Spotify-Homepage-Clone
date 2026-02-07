@@ -168,11 +168,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
                 const res = await fetch(`http://localhost:3000/search?q=${encodeURIComponent(query)}`);
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(errorData.error || "Server returned an error");
+                }
                 const videos = await res.json();
                 renderResults(videos);
             } catch (err) {
                 console.error(err);
-                if (searchView) searchView.innerHTML = "<h2>Error fetching results</h2>";
+                if (searchView) searchView.innerHTML = `<h2>Error fetching results: ${err.message}</h2>`;
             }
         }
     });
