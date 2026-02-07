@@ -1,4 +1,21 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // Check if running on file:// protocol
+    if (window.location.protocol === 'file:') {
+        alert("⚠️ CRITICAL: YouTube Player will NOT work when opening the file directly.\n\nPlease open 'http://localhost:3000' in your browser instead.");
+        // Add a visible banner too
+        const banner = document.createElement("div");
+        banner.style.position = "fixed";
+        banner.style.top = "0";
+        banner.style.left = "0";
+        banner.style.width = "100%";
+        banner.style.backgroundColor = "red";
+        banner.style.color = "white";
+        banner.style.textAlign = "center";
+        banner.style.padding = "10px";
+        banner.style.zIndex = "10000";
+        banner.innerText = "⚠️ APP ERROR: Please open http://localhost:3000 to play music.";
+        document.body.prepend(banner);
+    }
     // 1. Inject YouTube Iframe API
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
