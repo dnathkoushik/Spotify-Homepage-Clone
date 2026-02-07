@@ -145,17 +145,31 @@ document.addEventListener("DOMContentLoaded", () => {
     playerDiv.style.top = "-9999px";
     document.body.appendChild(playerDiv);
 
-    // Capture initial content for "Home" functionality
-    const mainContentDiv = document.querySelector(".content");
-    const initialContent = mainContentDiv.innerHTML;
+    // --- Sidebar & Navigation Implementations ---
 
-    // --- Sidebar Implementations ---
+    const homeView = document.getElementById("home-view");
+    const searchView = document.getElementById("search-view");
+
+    function showHome() {
+        if (homeView) homeView.style.display = "block";
+        if (searchView) searchView.style.display = "none";
+    }
+
+    function showSearch() {
+        if (homeView) homeView.style.display = "none";
+        if (searchView) searchView.style.display = "block";
+    }
 
     // 1. Home Button
     const homeBtn = document.getElementById("home-btn");
-    homeBtn.addEventListener("click", () => {
-        mainContentDiv.innerHTML = initialContent;
-    });
+    homeBtn.addEventListener("click", showHome);
+
+    // 1b. Back Arrow
+    const backArrow = document.querySelector(".backarrow");
+    if (backArrow) {
+        backArrow.style.cursor = "pointer";
+        backArrow.addEventListener("click", showHome);
+    }
 
     // 2. Search Button
     const searchBtn = document.getElementById("search-btn");
@@ -164,6 +178,68 @@ document.addEventListener("DOMContentLoaded", () => {
             searchInput.focus();
         }
     });
+
+    // Modified Search Handler to use Views
+    const searchInput = document.getElementById("search-input"); // Assuming searchInput exists
+    if (searchInput) {
+        searchInput.addEventListener("keypress", async (e) => {
+            if (e.key === "Enter") {
+                const query = searchInput.value;
+                if (!query) return;
+
+                showSearch();
+                searchView.innerHTML = "<h2 style='margin: 20px;'>Searching...</h2>";
+
+                try {
+                    const res = await fetch(`http://localhost:3000/search?q=${encodeURIComponent(query)}`);
+                    const videos = await res.json();
+                    renderResults(videos);
+                } catch (err) {
+                    console.error(err);
+                    searchView.innerHTML = "<h2>Error fetching results</h2>";
+                }
+            }
+        });
+    }
+
+    function renderResults(videos) {
+        // Ensure we are in search view
+        showSearch();
+
+        searchView.innerHTML = "<h2 style='margin: 20px;'>Search Results</h2>";
+
+        const cardsContainer = document.createElement("div");
+        cardsContainer.className = "cards";
+        cardsContainer.style.display = "flex";
+        cardsContainer.style.flexWrap = "wrap";
+        cardsContainer.style.gap = "20px";
+        cardsContainer.style.padding = "0 20px";
+
+        videos.forEach(video => {
+            const card = document.createElement("div");
+            card.className = "card-result";
+            card.style.backgroundColor = "#181818";
+            card.style.padding = "16px";
+            card.style.borderRadius = "8px";
+            card.style.width = "180px";
+            card.style.cursor = "pointer";
+            card.style.transition = "background-color 0.3s";
+
+            card.onmouseover = () => card.style.backgroundColor = "#282828";
+            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            card.innerHTML = `
+                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
+                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
+            `;
+
+            card.addEventListener("click", () => playVideo(video));
+            cardsContainer.appendChild(card);
+        });
+
+        searchView.appendChild(cardsContainer);
+    }
 
     // 3. Create Playlist & Plus Icon
     const createPlaylistBtn = document.getElementById("create-playlist-btn");
