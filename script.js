@@ -6,24 +6,32 @@ document.addEventListener("DOMContentLoaded", () => {
     firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
     // 2. Setup Player State
-    let player;
+    // Make player globally accessible
+    window.player = null;
     let updateInterval;
 
     window.onYouTubeIframeAPIReady = function () {
-        player = new YT.Player('youtube-player', {
-            height: '0',
-            width: '0',
+        console.log("Initializing YT Player...");
+        window.player = new YT.Player('youtube-player', {
+            height: '1',
+            width: '1',
             videoId: '', // Start empty
             playerVars: {
                 'playsinline': 1,
-                'controls': 0, // customized controls
+                'controls': 0,
+                'autoplay': 1 // Attempt autoplay
             },
             events: {
                 'onReady': onPlayerReady,
-                'onStateChange': onPlayerStateChange
+                'onStateChange': onPlayerStateChange,
+                'onError': onPlayerError
             }
         });
     };
+
+    function onPlayerError(event) {
+        console.error("YouTube Player Error:", event.data);
+    }
 
     function onPlayerReady(event) {
         console.log("Player Ready");
