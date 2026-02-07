@@ -38,10 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const volumeSlider = document.querySelector(".songoptions input");
         if (volumeSlider) {
             volumeSlider.addEventListener("input", (e) => {
-                if (player && player.setVolume) {
+                if (window.player && window.player.setVolume) {
                     // Map 0-15 slider to 0-100 volume
                     const vol = (e.target.value / 15) * 100;
-                    player.setVolume(vol);
+                    window.player.setVolume(vol);
                 }
             });
         }
@@ -66,9 +66,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function startProgressLoop() {
         stopProgressLoop();
         updateInterval = setInterval(() => {
-            if (!player || !player.getCurrentTime) return;
-            const currentTime = player.getCurrentTime();
-            const duration = player.getDuration();
+            if (!window.player || !window.player.getCurrentTime) return;
+            const currentTime = window.player.getCurrentTime();
+            const duration = window.player.getDuration();
 
             updateProgressBar(currentTime, duration);
             updateTimeText(currentTime, duration);
