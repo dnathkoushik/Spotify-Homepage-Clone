@@ -265,14 +265,21 @@ document.addEventListener("DOMContentLoaded", () => {
     playerDiv.style.top = "-9999px";
     document.body.appendChild(playerDiv);
 
-    // 3. Create Playlist & Plus Icon
-    const createPlaylistBtn = document.getElementById("create-playlist-btn");
-    const plusIcon = document.getElementById("plus-icon");
-    const playlistList = document.getElementById("playlist-list");
+    // --- Playlist & LocalStorage Logic ---
 
-    function createPlaylist() {
-        const name = prompt("Enter a name for your playlist:");
-        if (name) {
+    // 1. Initialize Playlists
+    let playlists = JSON.parse(localStorage.getItem("spotify_playlists")) || {};
+
+    // 2. Function to Save Playlists
+    function savePlaylists() {
+        localStorage.setItem("spotify_playlists", JSON.stringify(playlists));
+    }
+
+    // 3. Render Sidebar Playlists on Load
+    function renderSidebarPlaylists() {
+        if (!playlistList) return;
+        playlistList.innerHTML = ""; // Clear existing
+        Object.keys(playlists).forEach(name => {
             const playlistItem = document.createElement("div");
             playlistItem.style.padding = "10px";
             playlistItem.style.cursor = "pointer";
@@ -283,16 +290,168 @@ document.addEventListener("DOMContentLoaded", () => {
 
             playlistItem.onmouseover = () => playlistItem.style.opacity = "1";
             playlistItem.onmouseout = () => playlistItem.style.opacity = "0.8";
+            playlistItem.onclick = () => showPlaylist(name);
 
             playlistList.appendChild(playlistItem);
+        });
+    }
 
-            // Optional: Hide the "Create your first playlist" card if desired, 
-            // but usually Spotify keeps the 'create' button around or moves it.
-            // For now, we just append to the list.
+    // 4. Create Playlist Logic
+    const createPlaylistBtn = document.getElementById("create-playlist-btn");
+    const plusIcon = document.getElementById("plus-icon");
+    const playlistList = document.getElementById("playlist-list");
+
+    function createPlaylist() {
+        const name = prompt("Enter a name for your playlist:");
+        if (name) {
+            if (playlists[name]) {
+                alert("Playlist already exists!");
+                return;
+            }
+            playlists[name] = []; // Initialize empty array for songs
+            savePlaylists();
+            renderSidebarPlaylists();
         }
     }
 
     if (createPlaylistBtn) createPlaylistBtn.addEventListener("click", createPlaylist);
     if (plusIcon) plusIcon.addEventListener("click", createPlaylist);
+
+    // Initial Render
+    renderSidebarPlaylists();
+
+    // 5. Add Song to Playlist Function
+    function addToPlaylist(video) {
+        const playlistNames = Object.keys(playlists);
+        if (playlistNames.length === 0) {
+            alert("No playlists found. Create one first!");
+            return;
+        }
+
+        // Simple prompt for now - could be a modal
+        let promptText = "Type the name of the playlist to add to:\n";
+        playlistNames.forEach(name => promptText += `- ${name}\n`);
+
+        const selectedName = prompt(promptText);
+        if (selectedName && playlists[selectedName]) {
+            // Check duplicates
+            const exists = playlists[selectedName].find(s => s.id === video.id);
+            if (exists) {
+                alert("Song already in playlist!");
+            } else {
+                playlists[selectedName].push(video);
+                savePlaylists();
+                alert(`Added to ${selectedName}`);
+            }
+        } else if (selectedName) {
+            alert("Playlist not found.");
+        }
+    }
+
+    // 6. Show Playlist View
+    function showPlaylist(name) {
+        showSearch(); // Reuse search view container for now as "Custom View"
+        if (!searchView) return;
+
+        searchView.innerHTML = `<h2 style='margin: 20px;'>Playlist: ${name}</h2>`;
+
+        const songs = playlists[name] || [];
+        if (songs.length === 0) {
+            searchView.innerHTML += `<p style='margin: 20px; color: #a7a7a7;'>This playlist is empty.</p>`;
+            return;
+        }
+
+        const cardsContainer = document.createElement("div");
+        cardsContainer.className = "cards";
+        cardsContainer.style.display = "flex";
+        cardsContainer.style.flexWrap = "wrap";
+        cardsContainer.style.gap = "20px";
+        cardsContainer.style.padding = "0 20px";
+
+        songs.forEach((video, index) => {
+            const card = document.createElement("div");
+            card.className = "card-result";
+            card.style.backgroundColor = "#181818";
+            card.style.padding = "16px";
+            card.style.borderRadius = "8px";
+            card.style.width = "180px";
+            card.style.cursor = "pointer";
+            card.style.transition = "background-color 0.3s";
+            card.style.position = "relative"; // For delete button
+
+            card.onmouseover = () => card.style.backgroundColor = "#282828";
+            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            // Click entire card to play
+            card.innerHTML = `
+                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
+                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
+            `;
+
+            // Play click
+            card.addEventListener("click", (e) => {
+                playVideo(video);
+            });
+
+            cardsContainer.appendChild(card);
+        });
+
+        searchView.appendChild(cardsContainer);
+    }
+
+    // Update renderResults to include "Add to Playlist" button
+    const oldRenderResults = renderResults;
+    renderResults = function (videos) {
+        // Ensure we are in search view
+        showSearch();
+
+        if (!searchView) return;
+        searchView.innerHTML = "<h2 style='margin: 20px;'>Search Results</h2>";
+
+        const cardsContainer = document.createElement("div");
+        cardsContainer.className = "cards";
+        cardsContainer.style.display = "flex";
+        cardsContainer.style.flexWrap = "wrap";
+        cardsContainer.style.gap = "20px";
+        cardsContainer.style.padding = "0 20px";
+
+        videos.forEach(video => {
+            const card = document.createElement("div");
+            card.className = "card-result";
+            card.style.backgroundColor = "#181818";
+            card.style.padding = "16px";
+            card.style.borderRadius = "8px";
+            card.style.width = "180px";
+            card.style.cursor = "pointer";
+            card.style.transition = "background-color 0.3s";
+            card.style.position = "relative";
+
+            card.onmouseover = () => card.style.backgroundColor = "#282828";
+            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            card.innerHTML = `
+                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
+                 <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
+                 <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
+                 <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none;">+</button>
+             `;
+
+            // Show add button on hover
+            const addBtn = card.querySelector(".add-btn");
+            card.addEventListener("mouseenter", () => addBtn.style.display = "block");
+            card.addEventListener("mouseleave", () => addBtn.style.display = "none");
+
+            addBtn.addEventListener("click", (e) => {
+                e.stopPropagation(); // Prevent playing
+                addToPlaylist(video);
+            });
+
+            card.addEventListener("click", () => playVideo(video));
+            cardsContainer.appendChild(card);
+        });
+
+        searchView.appendChild(cardsContainer);
+    };
 
 });
