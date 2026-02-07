@@ -161,7 +161,7 @@ body{
 
 .maincontentdiv{
     background-color: #1f1f1f;
-    width: 80%;
+    flex: 1; /* Take remaining width */
     height: 88.5%;
     margin: 0.25rem 0.5rem 0.25rem 0.25rem;
     padding: 0 1rem;
