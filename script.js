@@ -232,7 +232,16 @@ document.addEventListener("DOMContentLoaded", () => {
         artistElem.innerHTML = `<a href="#" class="opacity">${video.author}</a>`;
 
         if (player && typeof player.loadVideoById === 'function') {
-            player.loadVideoById(video.id);
+            try {
+                player.loadVideoById(video.id);
+                player.playVideo(); // Ensure it plays
+            } catch (error) {
+                console.error("Player error:", error);
+                alert("Error playing video. See console for details.");
+            }
+        } else {
+            console.error("Player not initialized yet");
+            alert("Player is loading... please wait a moment and try again.");
         }
     }
 
@@ -242,12 +251,19 @@ document.addEventListener("DOMContentLoaded", () => {
         playBtn.addEventListener("click", () => {
             if (!player) return;
             const state = player.getPlayerState();
+            /* 
+               state can be:
+               -1 (unstarted)
+               0 (ended)
+               1 (playing)
+               2 (paused)
+               3 (buffering)
+               5 (video cued)
+            */
             if (state === YT.PlayerState.PLAYING) {
                 player.pauseVideo();
-                playBtn.style.opacity = "0.7"; // Visual feedback for pause
             } else {
                 player.playVideo();
-                playBtn.style.opacity = "1";
             }
         });
     }
@@ -262,12 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Create the player container (hidden)
-    const playerDiv = document.createElement("div");
-    playerDiv.id = "youtube-player";
-    playerDiv.style.position = "absolute";
-    playerDiv.style.top = "-9999px";
-    document.body.appendChild(playerDiv);
+    // (Dynamic player creation removed - using static HTML)
 
     // --- Playlist & LocalStorage Logic ---
 
