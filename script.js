@@ -239,10 +239,11 @@ document.addEventListener("DOMContentLoaded", () => {
         titleElem.innerHTML = `<a href="#">${video.title}</a>`;
         artistElem.innerHTML = `<a href="#" class="opacity">${video.author}</a>`;
 
-        if (player && typeof player.loadVideoById === 'function') {
+        // Check window.player
+        if (window.player && typeof window.player.loadVideoById === 'function') {
             try {
-                player.loadVideoById(video.id);
-                player.playVideo(); // Ensure it plays
+                window.player.loadVideoById(video.id);
+                // setTimeout(() => window.player.playVideo(), 500); // Sometimes needed
             } catch (error) {
                 console.error("Player error:", error);
                 alert("Error playing video. See console for details.");
