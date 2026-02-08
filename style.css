@@ -13,20 +13,19 @@ body {
 }
 
 .maindiv {
-    height: 100vh;
+    height: calc(100vh - 6rem);
     width: 100%;
     background-color: #000;
     display: flex;
     flex-direction: row;
-    /* justify-content: space-between; Removed to prevent spacing issues */
-    align-items: center;
+    align-items: stretch;
     overflow: hidden;
 }
 
 
 
 .navdiv {
-    height: 100%;
+    /* height: 100%; Let flex stretch handle it */
     width: 25rem;
     display: flex;
     flex-direction: column;
@@ -167,13 +166,12 @@ body {
     background-color: #1f1f1f;
     flex: 1;
     /* Take remaining width */
-    height: 88.5%;
-    margin: 0.25rem 0.5rem 0.25rem 0.25rem;
+    /* height: handled by flex stretch */
+    margin: 0.5rem 0.5rem 0.5rem 0.25rem;
     padding: 0 1rem;
     border-radius: 0.5rem;
-    overflow: auto;
-    position: relative;
-    bottom: 2rem;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .maincontentdiv::-webkit-scrollbar {
