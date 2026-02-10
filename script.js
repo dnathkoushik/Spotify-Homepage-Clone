@@ -223,15 +223,11 @@ document.addEventListener("DOMContentLoaded", () => {
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            card.style.backgroundColor = "#181818";
-            card.style.padding = "16px";
-            card.style.borderRadius = "8px";
-            card.style.width = "180px";
-            card.style.cursor = "pointer";
-            card.style.transition = "background-color 0.3s";
+            // Inline styles removed to use CSS class .card-result
 
-            card.onmouseover = () => card.style.backgroundColor = "#282828";
-            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            // Hover effects handled by CSS
+
 
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
@@ -447,19 +443,11 @@ document.addEventListener("DOMContentLoaded", () => {
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            card.style.backgroundColor = "#181818";
-            // card.style.padding = "16px"; // Already in class, but ensuring
-            card.style.minWidth = "160px"; // Needed for horizontal scroll
-            card.style.maxWidth = "160px";
-            card.style.borderRadius = "8px";
-            card.style.padding = "16px";
-            card.style.cursor = "pointer";
-            card.style.transition = "background-color 0.3s";
-            card.style.position = "relative";
-            card.style.flexShrink = "0"; // Don't shrink in flex container
+            // Inline styles removed to use CSS class .card-result
 
-            card.onmouseover = () => card.style.backgroundColor = "#282828";
-            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            // Hover effects handled by CSS
+
 
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
@@ -511,16 +499,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const card = document.createElement("div");
             // ... (Same card style as before) ...
             card.className = "card-result";
-            card.style.backgroundColor = "#181818";
-            card.style.padding = "16px";
-            card.style.borderRadius = "8px";
-            card.style.width = "180px";
-            card.style.cursor = "pointer";
-            card.style.transition = "background-color 0.3s";
-            card.style.position = "relative";
+            // Inline styles removed to use CSS class .card-result
 
-            card.onmouseover = () => card.style.backgroundColor = "#282828";
-            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            // Hover effects handled by CSS
+
 
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
@@ -557,16 +540,11 @@ document.addEventListener("DOMContentLoaded", () => {
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            card.style.backgroundColor = "#181818";
-            card.style.padding = "16px";
-            card.style.borderRadius = "8px";
-            card.style.width = "180px";
-            card.style.cursor = "pointer";
-            card.style.transition = "background-color 0.3s";
-            card.style.position = "relative";
+            // Inline styles removed to use CSS class .card-result
 
-            card.onmouseover = () => card.style.backgroundColor = "#282828";
-            card.onmouseout = () => card.style.backgroundColor = "#181818";
+
+            // Hover effects handled by CSS
+
 
             card.innerHTML = `
                  <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
