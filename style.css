@@ -355,6 +355,7 @@ body {
     width: 180px;
     /* Fixed width */
     min-width: 180px;
+    flex-shrink: 0;
     transition: background-color 0.3s ease;
     cursor: pointer;
 }
@@ -386,6 +387,7 @@ body {
     color: var(--text-subdued);
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -534,6 +536,7 @@ body {
 /* Slider Styling */
 input[type=range] {
     -webkit-appearance: none;
+    appearance: none;
     background: transparent;
     cursor: pointer;
     height: 4px;
