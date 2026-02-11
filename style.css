@@ -507,6 +507,14 @@ body {
     transition: opacity 0.2s;
 }
 
+.controls i {
+    font-size: 1rem;
+}
+
+.controls img {
+    height: 1rem;
+}
+
 .controls i:hover,
 .controls img:hover {
     opacity: 1;
