@@ -27,6 +27,10 @@ document.addEventListener("DOMContentLoaded", () => {
     window.player = null;
     let updateInterval;
 
+    // --- Song Queue ---
+    let songQueue = [];        // Array of video objects currently loaded
+    let currentQueueIndex = -1; // Index of the currently playing song
+
     window.onYouTubeIframeAPIReady = function () {
         console.log("Initializing YT Player...");
         window.player = new YT.Player('youtube-player', {
@@ -68,14 +72,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const playBtn = document.querySelector(".controls .play");
 
         if (event.data == YT.PlayerState.PLAYING) {
-            playBtn.src = "./assets/player_icon3.png"; // Replace with Pause Icon if available, or toggle logic
-            // For now, let's keep it simple or swap if you have a pause icon.
-            // A common trick is to change the src to a pause icon. 
-            // Since we don't have a verified pause icon asset, we'll stick to logic updates.
-
+            playBtn.src = "./assets/player_icon3.png";
             startProgressLoop();
+        } else if (event.data == YT.PlayerState.ENDED) {
+            // Auto-advance to next song
+            stopProgressLoop();
+            playNextTrack();
         } else {
-            // Paused or Ended
+            // Paused or buffering
             stopProgressLoop();
         }
     }
@@ -252,11 +256,17 @@ document.addEventListener("DOMContentLoaded", () => {
         titleElem.innerHTML = `<a href="#">${video.title}</a>`;
         artistElem.innerHTML = `<a href="#" class="opacity">${video.author}</a>`;
 
+        // Update queue index if this video is in the queue
+        const idx = songQueue.findIndex(v => v.id === video.id);
+        if (idx !== -1) currentQueueIndex = idx;
+
+        // Highlight the active card
+        highlightActiveCard(video.id);
+
         // Check window.player
         if (window.player && typeof window.player.loadVideoById === 'function') {
             try {
                 window.player.loadVideoById(video.id);
-                // setTimeout(() => window.player.playVideo(), 500); // Sometimes needed
             } catch (error) {
                 console.error("Player error:", error);
                 alert("Error playing video. See console for details.");
@@ -267,27 +277,58 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // 6. Play/Pause & Seek Controls
+    // Highlight the currently playing card
+    function highlightActiveCard(videoId) {
+        document.querySelectorAll(".card-result").forEach(c => c.classList.remove("card-active"));
+        const activeCard = document.querySelector(`.card-result[data-id="${videoId}"]`);
+        if (activeCard) activeCard.classList.add("card-active");
+    }
+
+    // Play the next track in the queue
+    function playNextTrack() {
+        if (songQueue.length === 0) return;
+        currentQueueIndex = (currentQueueIndex + 1) % songQueue.length;
+        playVideo(songQueue[currentQueueIndex]);
+    }
+
+    // Play the previous track in the queue
+    function playPrevTrack() {
+        if (songQueue.length === 0) return;
+        // If more than 3 seconds in, restart current track; otherwise go previous
+        if (window.player && window.player.getCurrentTime && window.player.getCurrentTime() > 3) {
+            window.player.seekTo(0, true);
+            return;
+        }
+        currentQueueIndex = (currentQueueIndex - 1 + songQueue.length) % songQueue.length;
+        playVideo(songQueue[currentQueueIndex]);
+    }
+
+    // 6. Play/Pause, Seek & Prev/Next Controls
     const playBtn = document.querySelector(".controls .play");
     if (playBtn) {
         playBtn.addEventListener("click", () => {
             if (!window.player) return;
             const state = window.player.getPlayerState();
-            /* 
-               state can be:
-               -1 (unstarted)
-               0 (ended)
-               1 (playing)
-               2 (paused)
-               3 (buffering)
-               5 (video cued)
-            */
             if (state === YT.PlayerState.PLAYING) {
                 window.player.pauseVideo();
             } else {
                 window.player.playVideo();
             }
         });
+    }
+
+    // Previous track (player_icon2)
+    const prevBtn = document.querySelector(".controls img[src*='player_icon2']");
+    if (prevBtn) {
+        prevBtn.style.cursor = "pointer";
+        prevBtn.addEventListener("click", playPrevTrack);
+    }
+
+    // Next track (player_icon4)
+    const nextBtn = document.querySelector(".controls img[src*='player_icon4']");
+    if (nextBtn) {
+        nextBtn.style.cursor = "pointer";
+        nextBtn.addEventListener("click", playNextTrack);
     }
 
     const progressBar = document.querySelector(".musictrack .track");
@@ -440,23 +481,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderCardsToContainer(videos, container) {
         container.innerHTML = "";
+
+        // Merge these videos into the global queue (avoid duplicates)
+        videos.forEach(v => {
+            if (!songQueue.find(q => q.id === v.id)) songQueue.push(v);
+        });
+
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            // Inline styles removed to use CSS class .card-result
-
-
-            // Hover effects handled by CSS
-
+            card.dataset.id = video.id; // for queue highlight
 
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
                 <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: white;">${video.title}</h3>
                 <p style="font-size: 12px; color: #a7a7a7;">${video.author}</p>
-                 <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-weight:bold;">+</button>
+                <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-weight:bold; font-size:18px; line-height:1;">+</button>
             `;
 
-            // Hover effects for button
             const addBtn = card.querySelector(".add-btn");
             card.addEventListener("mouseenter", () => addBtn.style.display = "block");
             card.addEventListener("mouseleave", () => addBtn.style.display = "none");
@@ -522,11 +564,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Update renderResults to include "Add to Playlist" button
-    const oldRenderResults = renderResults;
     renderResults = function (videos) {
-        // Ensure we are in search view
         showSearch();
-
         if (!searchView) return;
         searchView.innerHTML = "<h2 style='margin: 20px;'>Search Results</h2>";
 
@@ -537,29 +576,28 @@ document.addEventListener("DOMContentLoaded", () => {
         cardsContainer.style.gap = "20px";
         cardsContainer.style.padding = "0 20px";
 
+        // Replace queue with search results
+        songQueue = [...videos];
+        currentQueueIndex = -1;
+
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            // Inline styles removed to use CSS class .card-result
-
-
-            // Hover effects handled by CSS
-
+            card.dataset.id = video.id;
 
             card.innerHTML = `
-                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
-                 <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
-                 <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
-                 <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none;">+</button>
-             `;
+                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
+                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
+                <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-size:18px; line-height:1; font-weight:bold;">+</button>
+            `;
 
-            // Show add button on hover
             const addBtn = card.querySelector(".add-btn");
             card.addEventListener("mouseenter", () => addBtn.style.display = "block");
             card.addEventListener("mouseleave", () => addBtn.style.display = "none");
 
             addBtn.addEventListener("click", (e) => {
-                e.stopPropagation(); // Prevent playing
+                e.stopPropagation();
                 addToPlaylist(video);
             });
 
