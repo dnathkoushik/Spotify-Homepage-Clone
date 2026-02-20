@@ -356,12 +356,20 @@ body {
     /* Fixed width */
     min-width: 180px;
     flex-shrink: 0;
-    transition: background-color 0.3s ease;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
     cursor: pointer;
+    position: relative;
+    /* Needed for the absolute-positioned + button */
 }
 
 .card-result:hover {
     background-color: #282828;
+}
+
+/* Currently playing card highlight */
+.card-result.card-active {
+    background-color: #1a3a2a;
+    box-shadow: 0 0 0 2px #1ed760;
 }
 
 .card-result img {
