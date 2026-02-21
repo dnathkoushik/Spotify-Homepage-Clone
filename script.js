@@ -31,6 +31,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let songQueue = [];        // Array of video objects currently loaded
     let currentQueueIndex = -1; // Index of the currently playing song
 
+    // --- Playback Modes ---
+    let isShuffled = false;
+    let repeatMode = 'none'; // 'none' | 'all' | 'one'
+    let originalQueue = []; // backup of queue before shuffle
+
     window.onYouTubeIframeAPIReady = function () {
         console.log("Initializing YT Player...");
         window.player = new YT.Player('youtube-player', {
@@ -75,9 +80,15 @@ document.addEventListener("DOMContentLoaded", () => {
             playBtn.src = "./assets/player_icon3.png";
             startProgressLoop();
         } else if (event.data == YT.PlayerState.ENDED) {
-            // Auto-advance to next song
+            // Auto-advance based on repeat mode
             stopProgressLoop();
-            playNextTrack();
+            if (repeatMode === 'one') {
+                // Repeat the current track
+                window.player.seekTo(0, true);
+                window.player.playVideo();
+            } else {
+                playNextTrack();
+            }
         } else {
             // Paused or buffering
             stopProgressLoop();
@@ -287,7 +298,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Play the next track in the queue
     function playNextTrack() {
         if (songQueue.length === 0) return;
-        currentQueueIndex = (currentQueueIndex + 1) % songQueue.length;
+        if (repeatMode === 'all') {
+            currentQueueIndex = (currentQueueIndex + 1) % songQueue.length;
+        } else {
+            // Don't loop if not repeating all; stop at end
+            if (currentQueueIndex + 1 >= songQueue.length) return;
+            currentQueueIndex = currentQueueIndex + 1;
+        }
         playVideo(songQueue[currentQueueIndex]);
     }
 
@@ -301,6 +318,62 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         currentQueueIndex = (currentQueueIndex - 1 + songQueue.length) % songQueue.length;
         playVideo(songQueue[currentQueueIndex]);
+    }
+
+    // --- Shuffle ---
+    const shuffleBtn = document.querySelector(".controls img[src*='player_icon1']");
+    if (shuffleBtn) {
+        shuffleBtn.style.cursor = "pointer";
+        shuffleBtn.addEventListener("click", () => {
+            isShuffled = !isShuffled;
+            if (isShuffled) {
+                // Save original order and shuffle
+                originalQueue = [...songQueue];
+                const playing = currentQueueIndex >= 0 ? songQueue[currentQueueIndex] : null;
+                const rest = songQueue.filter((_, i) => i !== currentQueueIndex);
+                // Fisher-Yates shuffle
+                for (let i = rest.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [rest[i], rest[j]] = [rest[j], rest[i]];
+                }
+                songQueue = playing ? [playing, ...rest] : rest;
+                currentQueueIndex = playing ? 0 : -1;
+                shuffleBtn.style.filter = 'invert(1) sepia(1) saturate(5) hue-rotate(90deg)';
+                shuffleBtn.title = 'Shuffle: ON';
+            } else {
+                // Restore original order
+                const playing = currentQueueIndex >= 0 ? songQueue[currentQueueIndex] : null;
+                songQueue = [...originalQueue];
+                currentQueueIndex = playing ? songQueue.findIndex(v => v.id === playing.id) : -1;
+                shuffleBtn.style.filter = '';
+                shuffleBtn.title = 'Shuffle: OFF';
+            }
+        });
+    }
+
+    // --- Repeat ---
+    const repeatBtn = document.querySelector(".controls .fa-rotate-right");
+    if (repeatBtn) {
+        repeatBtn.style.cursor = "pointer";
+        repeatBtn.title = 'Repeat: Off';
+        repeatBtn.addEventListener("click", () => {
+            if (repeatMode === 'none') {
+                repeatMode = 'all';
+                repeatBtn.style.color = '#1ed760';
+                repeatBtn.title = 'Repeat: All';
+            } else if (repeatMode === 'all') {
+                repeatMode = 'one';
+                repeatBtn.style.color = '#1ed760';
+                repeatBtn.title = 'Repeat: One';
+                // Show a small "1" badge visually
+                repeatBtn.dataset.repeat = '1';
+            } else {
+                repeatMode = 'none';
+                repeatBtn.style.color = '';
+                repeatBtn.title = 'Repeat: Off';
+                delete repeatBtn.dataset.repeat;
+            }
+        });
     }
 
     // 6. Play/Pause, Seek & Prev/Next Controls
@@ -359,15 +432,30 @@ document.addEventListener("DOMContentLoaded", () => {
         playlistList.innerHTML = ""; // Clear existing
         Object.keys(playlists).forEach(name => {
             const playlistItem = document.createElement("div");
-            playlistItem.style.padding = "10px";
-            playlistItem.style.cursor = "pointer";
-            playlistItem.style.opacity = "0.8";
-            playlistItem.style.color = "white";
-            playlistItem.style.fontSize = "0.9rem";
-            playlistItem.innerText = name;
+            playlistItem.className = "sidebar-playlist-item";
 
-            playlistItem.onmouseover = () => playlistItem.style.opacity = "1";
-            playlistItem.onmouseout = () => playlistItem.style.opacity = "0.8";
+            const nameSpan = document.createElement("span");
+            nameSpan.innerText = name;
+            nameSpan.className = "sidebar-playlist-name";
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.innerHTML = "&times;";
+            deleteBtn.className = "sidebar-playlist-delete";
+            deleteBtn.title = `Delete playlist "${name}"`;
+
+            deleteBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete playlist "${name}"?`)) {
+                    delete playlists[name];
+                    savePlaylists();
+                    renderSidebarPlaylists();
+                    // If the playlist was being shown, go back to home
+                    showHome();
+                }
+            });
+
+            playlistItem.appendChild(nameSpan);
+            playlistItem.appendChild(deleteBtn);
             playlistItem.onclick = () => showPlaylist(name);
 
             playlistList.appendChild(playlistItem);
