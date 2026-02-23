@@ -1,8 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
+
+    // ─── Toast Notification System ────────────────────────────────────────
+    const toastContainer = document.getElementById("toast-container");
+    function showToast(message, type = "default", duration = 2500) {
+        if (!toastContainer) return;
+        const toast = document.createElement("div");
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        // Animate in
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => toast.classList.add("show"));
+        });
+        // Animate out and remove
+        setTimeout(() => {
+            toast.classList.remove("show");
+            toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+        }, duration);
+    }
+
     // Check if running on file:// protocol
     if (window.location.protocol === 'file:') {
-        alert("⚠️ CRITICAL: YouTube Player will NOT work when opening the file directly.\n\nPlease open 'http://localhost:3000' in your browser instead.");
-        // Add a visible banner too
         const banner = document.createElement("div");
         banner.style.position = "fixed";
         banner.style.top = "0";
@@ -61,29 +79,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function onPlayerReady(event) {
         console.log("Player Ready");
-        const volumeSlider = document.querySelector(".songoptions input");
+        const volumeSlider = document.getElementById("volume-slider");
         if (volumeSlider) {
             volumeSlider.addEventListener("input", (e) => {
                 if (window.player && window.player.setVolume) {
-                    // Map 0-15 slider to 0-100 volume
                     const vol = (e.target.value / 15) * 100;
                     window.player.setVolume(vol);
+                    isMuted = false;
+                    muteBtn && muteBtn.classList.remove("muted");
                 }
             });
         }
     }
 
+    // Play/pause icon: player_icon3.png = play, play_musicbar.png = pause
+    const PLAY_ICON = "./assets/player_icon3.png";
+    const PAUSE_ICON = "./assets/play_musicbar.png";
+
     function onPlayerStateChange(event) {
         const playBtn = document.querySelector(".controls .play");
 
         if (event.data == YT.PlayerState.PLAYING) {
-            playBtn.src = "./assets/player_icon3.png";
+            if (playBtn) playBtn.src = PAUSE_ICON; // Show pause icon when playing
             startProgressLoop();
         } else if (event.data == YT.PlayerState.ENDED) {
-            // Auto-advance based on repeat mode
+            if (playBtn) playBtn.src = PLAY_ICON;
             stopProgressLoop();
             if (repeatMode === 'one') {
-                // Repeat the current track
                 window.player.seekTo(0, true);
                 window.player.playVideo();
             } else {
@@ -91,6 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } else {
             // Paused or buffering
+            if (playBtn) playBtn.src = PLAY_ICON;
             stopProgressLoop();
         }
     }
@@ -259,6 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 5. Play Video & Player Controls
     function playVideo(video) {
+        currentlyPlayingVideo = video;
         const coverImg = document.querySelector(".playingsongimg img");
         const titleElem = document.querySelector(".playingsonginfo .p1");
         const artistElem = document.querySelector(".playingsonginfo .p2");
@@ -274,17 +298,23 @@ document.addEventListener("DOMContentLoaded", () => {
         // Highlight the active card
         highlightActiveCard(video.id);
 
+        // Update heart button state for this song
+        updateHeartButton(video.id);
+
+        // Refresh Queue panel if open
+        renderQueuePanel();
+
         // Check window.player
         if (window.player && typeof window.player.loadVideoById === 'function') {
             try {
                 window.player.loadVideoById(video.id);
             } catch (error) {
                 console.error("Player error:", error);
-                alert("Error playing video. See console for details.");
+                showToast("Error playing video.", "error");
             }
         } else {
             console.error("Player not initialized yet");
-            alert("Player is loading... please wait a moment and try again.");
+            showToast("Player is loading... please try again.", "error");
         }
     }
 
@@ -379,15 +409,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // 6. Play/Pause, Seek & Prev/Next Controls
     const playBtn = document.querySelector(".controls .play");
     if (playBtn) {
-        playBtn.addEventListener("click", () => {
-            if (!window.player) return;
-            const state = window.player.getPlayerState();
-            if (state === YT.PlayerState.PLAYING) {
-                window.player.pauseVideo();
-            } else {
-                window.player.playVideo();
-            }
-        });
+        playBtn.addEventListener("click", togglePlayPause);
+    }
+
+    function togglePlayPause() {
+        if (!window.player) return;
+        const state = window.player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+            window.player.pauseVideo();
+        } else {
+            window.player.playVideo();
+        }
     }
 
     // Previous track (player_icon2)
@@ -412,6 +444,211 @@ document.addEventListener("DOMContentLoaded", () => {
             const seekTo = (e.target.value / 100) * duration;
             window.player.seekTo(seekTo, true);
         });
+    }
+
+    // ─── Mute Toggle ────────────────────────────────────────────────────────
+    const muteBtn = document.getElementById("mute-btn");
+    let isMuted = false;
+    let volumeBeforeMute = 100;
+    if (muteBtn) {
+        muteBtn.addEventListener("click", () => {
+            if (!window.player) return;
+            isMuted = !isMuted;
+            if (isMuted) {
+                volumeBeforeMute = window.player.getVolume();
+                window.player.setVolume(0);
+                muteBtn.classList.add("muted");
+                // swap icon
+                muteBtn.className = muteBtn.className.replace('fa-volume-low', 'fa-volume-xmark');
+                showToast("Muted");
+            } else {
+                window.player.setVolume(volumeBeforeMute);
+                muteBtn.classList.remove("muted");
+                muteBtn.className = muteBtn.className.replace('fa-volume-xmark', 'fa-volume-low');
+                showToast("Unmuted");
+            }
+        });
+    }
+
+    // ─── Heart / Like Button ────────────────────────────────────────────────
+    let likedSongs = JSON.parse(localStorage.getItem("spotify_liked_songs")) || {};
+    let currentlyPlayingVideo = null; // track what's currently loaded
+
+    function savelikedSongs() {
+        localStorage.setItem("spotify_liked_songs", JSON.stringify(likedSongs));
+    }
+
+    function updateHeartButton(videoId) {
+        const heartIcon = document.getElementById("heart-btn");
+        if (!heartIcon) return;
+        if (likedSongs[videoId]) {
+            heartIcon.classList.remove("fa-regular");
+            heartIcon.classList.add("fa-solid", "liked");
+        } else {
+            heartIcon.classList.remove("fa-solid", "liked");
+            heartIcon.classList.add("fa-regular");
+        }
+    }
+
+    const heartBtn = document.getElementById("heart-btn");
+    if (heartBtn) {
+        heartBtn.addEventListener("click", () => {
+            if (!currentlyPlayingVideo) {
+                showToast("Nothing is playing.");
+                return;
+            }
+            const id = currentlyPlayingVideo.id;
+            if (likedSongs[id]) {
+                delete likedSongs[id];
+                savelikedSongs();
+                updateHeartButton(id);
+                showToast("Removed from liked songs");
+            } else {
+                likedSongs[id] = currentlyPlayingVideo;
+                savelikedSongs();
+                updateHeartButton(id);
+                showToast("Added to liked songs ♪", "success");
+            }
+        });
+    }
+
+    // Plus-to-playlist button (in player bar)
+    const plusToPlaylistBtn = document.getElementById("plus-to-playlist-btn");
+    if (plusToPlaylistBtn) {
+        plusToPlaylistBtn.addEventListener("click", () => {
+            if (!currentlyPlayingVideo) {
+                showToast("Nothing is playing.");
+                return;
+            }
+            addToPlaylist(currentlyPlayingVideo);
+        });
+    }
+
+    // ─── Now Playing Queue Panel ─────────────────────────────────────────────
+    const queuePanel = document.getElementById("queue-panel");
+    const queueList = document.getElementById("queue-list");
+    const queueToggleBtn = document.getElementById("queue-toggle-btn");
+    const closeQueueBtn = document.getElementById("close-queue-btn");
+    const queueOverlay = document.getElementById("queue-overlay");
+    let queueOpen = false;
+
+    function openQueuePanel() {
+        queueOpen = true;
+        if (queuePanel) queuePanel.classList.add("open");
+        if (queueOverlay) queueOverlay.style.display = "block";
+        if (queueToggleBtn) queueToggleBtn.classList.add("queue-btn-active");
+        renderQueuePanel();
+    }
+    function closeQueuePanel() {
+        queueOpen = false;
+        if (queuePanel) queuePanel.classList.remove("open");
+        if (queueOverlay) queueOverlay.style.display = "none";
+        if (queueToggleBtn) queueToggleBtn.classList.remove("queue-btn-active");
+    }
+    function renderQueuePanel() {
+        if (!queueList || !queueOpen) return;
+        queueList.innerHTML = "";
+
+        if (songQueue.length === 0) {
+            queueList.innerHTML = `<p style="padding:20px; color:#a7a7a7; text-align:center; font-size:13px;">No songs in queue.<br>Search and play music to build your queue.</p>`;
+            return;
+        }
+
+        // Section: Now Playing
+        if (currentQueueIndex >= 0 && currentQueueIndex < songQueue.length) {
+            const header = document.createElement("p");
+            header.style.cssText = "padding:8px 24px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; font-weight:700;";
+            header.textContent = "Now playing";
+            queueList.appendChild(header);
+            queueList.appendChild(buildQueueItem(songQueue[currentQueueIndex], currentQueueIndex, true));
+
+            // Section: Next up
+            const nextItems = songQueue.slice(currentQueueIndex + 1);
+            if (nextItems.length > 0) {
+                const nextHeader = document.createElement("p");
+                nextHeader.style.cssText = "padding:16px 24px 8px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; font-weight:700;";
+                nextHeader.textContent = "Next in queue";
+                queueList.appendChild(nextHeader);
+                nextItems.forEach((v, i) => {
+                    queueList.appendChild(buildQueueItem(v, currentQueueIndex + 1 + i, false));
+                });
+            }
+        } else {
+            // No current track known — show all
+            songQueue.forEach((v, i) => {
+                queueList.appendChild(buildQueueItem(v, i, false));
+            });
+        }
+    }
+    function buildQueueItem(video, idx, isActive) {
+        const item = document.createElement("div");
+        item.className = "queue-item" + (isActive ? " queue-active" : "");
+
+        item.innerHTML = `
+            <span class="queue-item-index">${isActive ? '<i class="fa-solid fa-volume-up" style="font-size:10px; color:#1ed760;"></i>' : idx + 1}</span>
+            <img src="${video.thumbnail}" alt="">
+            <div class="queue-item-info">
+                <div class="queue-item-title">${video.title}</div>
+                <div class="queue-item-artist">${video.author}</div>
+            </div>
+        `;
+        item.addEventListener("click", () => {
+            currentQueueIndex = idx;
+            playVideo(video);
+        });
+        return item;
+    }
+
+    if (queueToggleBtn) queueToggleBtn.addEventListener("click", () => queueOpen ? closeQueuePanel() : openQueuePanel());
+    if (closeQueueBtn) closeQueueBtn.addEventListener("click", closeQueuePanel);
+    if (queueOverlay) queueOverlay.addEventListener("click", closeQueuePanel);
+
+    // ─── Keyboard Shortcuts ──────────────────────────────────────────────────
+    document.addEventListener("keydown", (e) => {
+        // Don't fire shortcuts if user is typing in a text input / textarea
+        const tag = document.activeElement.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+        switch (e.code) {
+            case "Space":
+                e.preventDefault();
+                togglePlayPause();
+                showShortcutHint("Space — Play / Pause");
+                break;
+            case "ArrowRight":
+                e.preventDefault();
+                playNextTrack();
+                showShortcutHint("→ Next track");
+                break;
+            case "ArrowLeft":
+                e.preventDefault();
+                playPrevTrack();
+                showShortcutHint("← Previous track");
+                break;
+            case "KeyM":
+                if (muteBtn) muteBtn.click();
+                showShortcutHint("M — Mute / Unmute");
+                break;
+            case "KeyQ":
+                queueOpen ? closeQueuePanel() : openQueuePanel();
+                showShortcutHint("Q — Queue panel");
+                break;
+        }
+    });
+
+    // Keyboard shortcut hint (transient label)
+    let shortcutHintEl = null;
+    let shortcutTimeout = null;
+    function showShortcutHint(text) {
+        if (!shortcutHintEl) {
+            shortcutHintEl = document.createElement("div");
+            shortcutHintEl.className = "shortcut-hint";
+            document.body.appendChild(shortcutHintEl);
+        }
+        shortcutHintEl.textContent = text;
+        shortcutHintEl.classList.add("visible");
+        clearTimeout(shortcutTimeout);
+        shortcutTimeout = setTimeout(() => shortcutHintEl.classList.remove("visible"), 1200);
     }
 
     // (Dynamic player creation removed - using static HTML)
@@ -496,7 +733,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const playlistNames = Object.keys(playlists);
         if (playlistNames.length === 0) {
-            alert("No playlists created yet. Create one in the sidebar!");
+            showToast("No playlists yet — create one in the sidebar!", "error");
             return;
         }
 
@@ -514,15 +751,14 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.style.fontWeight = "bold";
 
             btn.onclick = () => {
-                // Check duplicates
                 const exists = playlists[name].find(s => s.id === video.id);
                 if (exists) {
-                    alert("Song already in this playlist!");
+                    showToast(`Already in "${name}"`, "error");
                 } else {
                     playlists[name].push(video);
                     savePlaylists();
-                    // alert(`Added to ${name}`); // Optional feedback
-                    modal.style.display = "none"; // Close modal
+                    modal.style.display = "none";
+                    showToast(`Added to "${name}" ✓`, "success");
                 }
             };
             modalList.appendChild(btn);
@@ -532,13 +768,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         closeBtn.onclick = function () {
             modal.style.display = "none";
-        }
+        };
 
         window.onclick = function (event) {
             if (event.target == modal) {
                 modal.style.display = "none";
             }
-        }
+        };
     }
 
     // --- Dynamic Home Content ---

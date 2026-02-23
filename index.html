@@ -128,7 +128,8 @@
                     <p class="p1"><a href="#">Mahiye Jinna Sohna</a></p>
                     <p class="p2"><a href="#" class="opacity">An Emotional track</a></p>
                 </div>
-                <div class="plusicon"><i class="fa-solid fa-circle-plus opacity"></i></div>
+                <div class="plusicon"><i class="fa-solid fa-circle-plus opacity" id="plus-to-playlist-btn"></i></div>
+                <div class="hearticon"><i class="fa-regular fa-heart opacity" id="heart-btn"></i></div>
             </div>
             <div class="songcontrols">
                 <div class="controls">
@@ -147,10 +148,10 @@
             </div>
             <div class="songoptions">
                 <i class="fa-solid fa-display opacity"></i>
-                <i class="fa-solid fa-list opacity"></i>
+                <i class="fa-solid fa-list opacity" id="queue-toggle-btn" title="Now Playing Queue"></i>
                 <i class="fa-solid fa-gamepad opacity"></i>
-                <i class="fa-solid fa-volume-low opacity"></i>
-                <input type="range" min="0" max="15" />
+                <i class="fa-solid fa-volume-low opacity" id="mute-btn" title="Mute"></i>
+                <input type="range" min="0" max="15" id="volume-slider" />
                 <i class="fa-solid fa-laptop-file opacity"></i>
             </div>
         </div>
@@ -158,6 +159,21 @@
 
     <!-- Hidden Player Container -->
     <div id="youtube-player" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px;"></div>
+
+    <!-- Now Playing Queue Panel -->
+    <div id="queue-panel" class="queue-panel">
+        <div class="queue-panel-header">
+            <h3>Now Playing Queue</h3>
+            <button id="close-queue-btn" class="close-queue-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="queue-list" class="queue-list">
+            <!-- Queue items rendered by JS -->
+        </div>
+    </div>
+    <div id="queue-overlay" class="queue-overlay"></div>
+
+    <!-- Toast Notification -->
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="script.js"></script>
 </body>
