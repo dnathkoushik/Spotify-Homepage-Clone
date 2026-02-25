@@ -476,7 +476,78 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function savelikedSongs() {
         localStorage.setItem("spotify_liked_songs", JSON.stringify(likedSongs));
+        updateLikedSongsCount();
     }
+
+    function updateLikedSongsCount() {
+        const countEl = document.getElementById("liked-songs-count");
+        if (!countEl) return;
+        const n = Object.keys(likedSongs).length;
+        countEl.textContent = `${n} song${n !== 1 ? 's' : ''}`;
+    }
+
+    // Show Liked Songs view
+    function showLikedSongs() {
+        showSearch(); // reuse the search-view panel as a generic content panel
+        if (!searchView) return;
+
+        const songs = Object.values(likedSongs);
+        searchView.innerHTML = `
+            <div style="padding: 24px;">
+                <div style="display:flex; align-items:center; gap:20px; margin-bottom:28px;">
+                    <div style="width:80px; height:80px; border-radius:8px; background: linear-gradient(135deg, #4b0082, #1ed760); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class="fa-solid fa-heart" style="color:white; font-size:32px;"></i>
+                    </div>
+                    <div>
+                        <p style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; margin-bottom:4px;">Playlist</p>
+                        <h1 style="font-size:2rem; font-weight:800; color:white; margin:0 0 6px;">Liked Songs</h1>
+                        <p style="color:#a7a7a7; font-size:13px;">${songs.length} song${songs.length !== 1 ? 's' : ''}</p>
+                    </div>
+                </div>
+                <div id="liked-songs-cards" class="cards" style="display:flex; flex-wrap:wrap; gap:16px;"></div>
+            </div>
+        `;
+
+        const container = document.getElementById("liked-songs-cards");
+        if (songs.length === 0) {
+            container.innerHTML = `<p style="color:#a7a7a7; padding:8px;">No liked songs yet. Hit the <i class="fa-regular fa-heart"></i> while a song is playing!</p>`;
+            return;
+        }
+
+        songs.forEach(video => {
+            const card = document.createElement("div");
+            card.className = "card-result";
+            card.dataset.id = video.id;
+            card.innerHTML = `
+                <img src="${video.thumbnail}" style="width:100%; border-radius:4px; aspect-ratio:1; object-fit:cover; margin-bottom:12px;">
+                <h3 style="font-size:13px; font-weight:700; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white;">${video.title}</h3>
+                <p style="font-size:11px; color:#a7a7a7;">${video.author}</p>
+                <button class="remove-liked-btn" data-id="${video.id}" style="position:absolute; top:8px; right:8px; background:transparent; border:none; cursor:pointer; color:#1ed760; font-size:16px; display:none;" title="Remove from Liked Songs">
+                    <i class="fa-solid fa-heart"></i>
+                </button>
+            `;
+            const removeBtn = card.querySelector(".remove-liked-btn");
+            card.addEventListener("mouseenter", () => removeBtn.style.display = "block");
+            card.addEventListener("mouseleave", () => removeBtn.style.display = "none");
+            removeBtn.addEventListener("click", e => {
+                e.stopPropagation();
+                delete likedSongs[video.id];
+                savelikedSongs();
+                updateHeartButton(video.id);
+                showToast("Removed from Liked Songs");
+                showLikedSongs(); // refresh the view
+            });
+            card.addEventListener("click", () => playVideo(video));
+            container.appendChild(card);
+        });
+    }
+
+    // Liked Songs sidebar button
+    const likedSongsItem = document.getElementById("liked-songs-item");
+    if (likedSongsItem) likedSongsItem.addEventListener("click", showLikedSongs);
+
+    // Set initial count
+    updateLikedSongsCount();
 
     function updateHeartButton(videoId) {
         const heartIcon = document.getElementById("heart-btn");
@@ -502,12 +573,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 delete likedSongs[id];
                 savelikedSongs();
                 updateHeartButton(id);
-                showToast("Removed from liked songs");
+                showToast("Removed from Liked Songs");
             } else {
                 likedSongs[id] = currentlyPlayingVideo;
                 savelikedSongs();
                 updateHeartButton(id);
-                showToast("Added to liked songs ♪", "success");
+                showToast("Added to Liked Songs ♪", "success");
             }
         });
     }
