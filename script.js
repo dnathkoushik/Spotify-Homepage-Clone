@@ -261,12 +261,6 @@ document.addEventListener("DOMContentLoaded", () => {
         videos.forEach(video => {
             const card = document.createElement("div");
             card.className = "card-result";
-            // Inline styles removed to use CSS class .card-result
-
-
-            // Hover effects handled by CSS
-
-
             card.innerHTML = `
                 <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
                 <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
