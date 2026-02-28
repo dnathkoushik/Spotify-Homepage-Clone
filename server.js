@@ -1,49 +1,56 @@
 /* eslint-disable no-console */
 const express = require("express");
-const ytSearch = require("yt-search");
+const searchYouTube = require("yt-search");
 const cors = require("cors");
 const path = require("path");
 
-const app = express();
-const PORT = 3000;
+const server = express();
+const SERVER_PORT = 3000;
 
-app.use(cors());
-app.use(express.static(path.join(__dirname, '')));
+// Middleware setup
+server.use(cors());
+server.use(express.static(path.resolve(__dirname)));
 
-// Serve the frontend
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "index.html"));
+// Home route – serves frontend file
+server.get("/", (request, response) => {
+    response.sendFile(path.resolve(__dirname, "index.html"));
 });
 
-// Search API
-app.get("/search", async (req, res) => {
+// YouTube search endpoint
+server.get("/search", async (request, response) => {
+    const searchTerm = request.query.q;
+
+    if (!searchTerm) {
+        return response.status(400).json({
+            message: "Search query is required"
+        });
+    }
+
     try {
-        const query = req.query.q;
-        if (!query) {
-            return res.status(400).json({ error: "No query provided" });
-        }
+        const searchResult = await searchYouTube(searchTerm);
 
-        const results = await ytSearch(query);
-        if (!results || !results.videos) {
-            throw new Error("No videos found");
-        }
+        const videoList = (searchResult.videos || [])
+            .slice(0, 20)
+            .map(item => ({
+                videoId: item.videoId,
+                title: item.title,
+                thumbnailUrl: item.thumbnail,
+                channelName: item.author?.name || "Unknown",
+                length: item.timestamp,
+                totalViews: item.views
+            }));
 
-        const videos = results.videos.slice(0, 20).map(video => ({
-            id: video.videoId,
-            title: video.title,
-            thumbnail: video.thumbnail,
-            author: video.author ? video.author.name : "Unknown",
-            duration: video.timestamp,
-            views: video.views
-        }));
+        return response.status(200).json(videoList);
 
-        res.json(videos);
-    } catch (error) {
-        console.error("Search error:", error);
-        res.status(500).json({ error: "Failed to search" });
+    } catch (err) {
+        console.error("Error while fetching videos:", err.message);
+        return response.status(500).json({
+            message: "Unable to fetch search results"
+        });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+// Start server
+server.listen(SERVER_PORT, () => {
+    console.log(`Application running at http://localhost:${SERVER_PORT}`);
 });
