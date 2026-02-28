@@ -46,8 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let updateInterval;
 
     // --- Song Queue ---
-    let songQueue = [];        // Array of video objects currently loaded
-    let currentQueueIndex = -1; // Index of the currently playing song
+    let songQueue = [];  
+    let currentQueueIndex = -1;
 
     // --- Playback Modes ---
     let isShuffled = false;
