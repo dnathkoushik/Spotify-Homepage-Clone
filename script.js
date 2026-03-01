@@ -1,1000 +1,412 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-    // ─── Toast Notification System ────────────────────────────────────────
-    const toastContainer = document.getElementById("toast-container");
-    function showToast(message, type = "default", duration = 2500) {
-        if (!toastContainer) return;
-        const toast = document.createElement("div");
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        toastContainer.appendChild(toast);
-        // Animate in
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => toast.classList.add("show"));
-        });
-        // Animate out and remove
-        setTimeout(() => {
-            toast.classList.remove("show");
-            toast.addEventListener("transitionend", () => toast.remove(), { once: true });
-        }, duration);
-    }
+    /* =========================================================
+       GLOBAL STATE
+    ========================================================== */
 
-    // Check if running on file:// protocol
-    if (window.location.protocol === 'file:') {
-        const banner = document.createElement("div");
-        banner.style.position = "fixed";
-        banner.style.top = "0";
-        banner.style.left = "0";
-        banner.style.width = "100%";
-        banner.style.backgroundColor = "red";
-        banner.style.color = "white";
-        banner.style.textAlign = "center";
-        banner.style.padding = "10px";
-        banner.style.zIndex = "10000";
-        banner.innerText = "⚠️ APP ERROR: Please open http://localhost:3000 to play music.";
-        document.body.prepend(banner);
-    }
-    // 1. Inject YouTube Iframe API
-    const tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    let ytPlayer = null;
+    let progressTimer = null;
 
-    // 2. Setup Player State
-    // Make player globally accessible
-    window.player = null;
-    let updateInterval;
+    let queue = [];
+    let queueIndex = -1;
 
-    // --- Song Queue ---
-    let songQueue = [];  
-    let currentQueueIndex = -1;
+    let shuffleEnabled = false;
+    let repeatState = "none"; // none | all | single
+    let backupQueue = [];
 
-    // --- Playback Modes ---
-    let isShuffled = false;
-    let repeatMode = 'none'; // 'none' | 'all' | 'one'
-    let originalQueue = []; // backup of queue before shuffle
+    let activeVideo = null;
+    let likedMap = JSON.parse(localStorage.getItem("spotify_liked_songs")) || {};
+    let playlists = JSON.parse(localStorage.getItem("spotify_playlists")) || {};
 
-    window.onYouTubeIframeAPIReady = function () {
-        console.log("Initializing YT Player...");
-        window.player = new YT.Player('youtube-player', {
-            height: '1',
-            width: '1',
-            videoId: '', // Start empty
-            playerVars: {
-                'playsinline': 1,
-                'controls': 0,
-                'autoplay': 1 // Attempt autoplay
-            },
-            events: {
-                'onReady': onPlayerReady,
-                'onStateChange': onPlayerStateChange,
-                'onError': onPlayerError
-            }
-        });
-    };
-
-    function onPlayerError(event) {
-        console.error("YouTube Player Error:", event.data);
-    }
-
-    function onPlayerReady(event) {
-        console.log("Player Ready");
-        const volumeSlider = document.getElementById("volume-slider");
-        if (volumeSlider) {
-            volumeSlider.addEventListener("input", (e) => {
-                if (window.player && window.player.setVolume) {
-                    const vol = (e.target.value / 15) * 100;
-                    window.player.setVolume(vol);
-                    isMuted = false;
-                    muteBtn && muteBtn.classList.remove("muted");
-                }
-            });
-        }
-    }
-
-    // Play/pause icon: player_icon3.png = play, play_musicbar.png = pause
     const PLAY_ICON = "./assets/player_icon3.png";
     const PAUSE_ICON = "./assets/play_musicbar.png";
 
-    function onPlayerStateChange(event) {
+    /* =========================================================
+       TOAST SYSTEM
+    ========================================================== */
+
+    const toastRoot = document.getElementById("toast-container");
+
+    function notify(msg, type = "default", duration = 2500) {
+        if (!toastRoot) return;
+
+        const box = document.createElement("div");
+        box.className = `toast ${type}`;
+        box.textContent = msg;
+
+        toastRoot.appendChild(box);
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => box.classList.add("show"));
+        });
+
+        setTimeout(() => {
+            box.classList.remove("show");
+            box.addEventListener("transitionend", () => box.remove(), { once: true });
+        }, duration);
+    }
+
+    /* =========================================================
+       LOCAL FILE WARNING
+    ========================================================== */
+
+    if (window.location.protocol === "file:") {
+        const warning = document.createElement("div");
+        warning.style.cssText = `
+            position:fixed; top:0; left:0; width:100%;
+            background:red; color:white; padding:10px;
+            text-align:center; z-index:10000;
+        `;
+        warning.textContent = "⚠ Open http://localhost:3000 to use this app.";
+        document.body.prepend(warning);
+    }
+
+    /* =========================================================
+       YOUTUBE API LOADER
+    ========================================================== */
+
+    function loadYTScript() {
+        const tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(tag);
+    }
+
+    window.onYouTubeIframeAPIReady = () => {
+        ytPlayer = new YT.Player("youtube-player", {
+            height: "1",
+            width: "1",
+            videoId: "",
+            playerVars: {
+                playsinline: 1,
+                controls: 0,
+                autoplay: 1
+            },
+            events: {
+                onReady: handlePlayerReady,
+                onStateChange: handlePlayerState,
+                onError: e => console.error("YT Error:", e.data)
+            }
+        });
+    };
+
+    function handlePlayerReady() {
+        const volumeSlider = document.getElementById("volume-slider");
+        if (!volumeSlider) return;
+
+        volumeSlider.addEventListener("input", e => {
+            const value = (e.target.value / 15) * 100;
+            ytPlayer.setVolume(value);
+        });
+    }
+
+    function handlePlayerState(e) {
         const playBtn = document.querySelector(".controls .play");
 
-        if (event.data == YT.PlayerState.PLAYING) {
-            if (playBtn) playBtn.src = PAUSE_ICON; // Show pause icon when playing
-            startProgressLoop();
-        } else if (event.data == YT.PlayerState.ENDED) {
-            if (playBtn) playBtn.src = PLAY_ICON;
-            stopProgressLoop();
-            if (repeatMode === 'one') {
-                window.player.seekTo(0, true);
-                window.player.playVideo();
+        if (e.data === YT.PlayerState.PLAYING) {
+            if (playBtn) playBtn.src = PAUSE_ICON;
+            beginProgressTracking();
+        }
+        else if (e.data === YT.PlayerState.ENDED) {
+            stopProgressTracking();
+            if (repeatState === "single") {
+                ytPlayer.seekTo(0, true);
+                ytPlayer.playVideo();
             } else {
-                playNextTrack();
+                nextTrack();
             }
-        } else {
-            // Paused or buffering
+        }
+        else {
             if (playBtn) playBtn.src = PLAY_ICON;
-            stopProgressLoop();
+            stopProgressTracking();
         }
     }
 
-    function startProgressLoop() {
-        stopProgressLoop();
-        updateInterval = setInterval(() => {
-            if (!window.player || !window.player.getCurrentTime) return;
-            const currentTime = window.player.getCurrentTime();
-            const duration = window.player.getDuration();
+    loadYTScript();
 
-            updateProgressBar(currentTime, duration);
-            updateTimeText(currentTime, duration);
+    /* =========================================================
+       PROGRESS BAR
+    ========================================================== */
+
+    function beginProgressTracking() {
+        stopProgressTracking();
+
+        progressTimer = setInterval(() => {
+            if (!ytPlayer) return;
+
+            const current = ytPlayer.getCurrentTime();
+            const total = ytPlayer.getDuration();
+
+            updateProgress(current, total);
         }, 1000);
     }
 
-    function stopProgressLoop() {
-        if (updateInterval) clearInterval(updateInterval);
+    function stopProgressTracking() {
+        if (progressTimer) clearInterval(progressTimer);
     }
 
-    function updateProgressBar(current, total) {
-        const progressBar = document.querySelector(".musictrack .track");
-        if (progressBar && total > 0) {
-            progressBar.value = (current / total) * 100;
+    function updateProgress(current, total) {
+        const slider = document.querySelector(".musictrack .track");
+        const timeLabels = document.querySelectorAll(".musictrack span");
+
+        if (slider && total > 0) {
+            slider.value = (current / total) * 100;
+        }
+
+        if (timeLabels.length >= 2) {
+            timeLabels[0].textContent = formatTime(current);
+            timeLabels[1].textContent = formatTime(total);
         }
     }
 
-    function updateTimeText(current, total) {
-        const timeSpans = document.querySelectorAll(".musictrack span");
-        if (timeSpans.length >= 2) {
-            timeSpans[0].innerText = formatTime(current);
-            timeSpans[1].innerText = formatTime(total);
-        }
+    function formatTime(sec) {
+        if (!sec) return "0:00";
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s < 10 ? "0" : ""}${s}`;
     }
 
-    function formatTime(seconds) {
-        if (!seconds) return "0:00";
-        const min = Math.floor(seconds / 60);
-        const sec = Math.floor(seconds % 60);
-        return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    /* =========================================================
+       PLAYBACK CONTROL
+    ========================================================== */
+
+    function togglePlay() {
+        if (!ytPlayer) return;
+
+        const state = ytPlayer.getPlayerState();
+        state === YT.PlayerState.PLAYING
+            ? ytPlayer.pauseVideo()
+            : ytPlayer.playVideo();
     }
 
-    // 3. Add Search Bar to the Top Nav (and 4. Handle Search)
-    const nav2div = document.querySelector(".nav2div");
-    const searchContainer = document.createElement("div");
-    searchContainer.className = "search-container";
-    searchContainer.style.flexGrow = "0.5";
-    searchContainer.style.margin = "0 20px";
-
-    const searchInput = document.createElement("input");
-    searchInput.type = "text";
-    searchInput.id = "search-input"; // Add ID for easier selection if needed, though we have var reference
-    searchInput.placeholder = "What do you want to play?";
-    searchInput.style.width = "100%";
-    searchInput.style.padding = "10px 20px";
-    searchInput.style.borderRadius = "20px";
-    searchInput.style.border = "none";
-    searchInput.style.outline = "none";
-    searchInput.style.backgroundColor = "#242424";
-    searchInput.style.color = "white";
-    searchInput.style.fontSize = "1rem";
-
-    searchContainer.appendChild(searchInput);
-
-    // Insert after arrows
-    const arrowsDiv = document.querySelector(".arrowsdiv");
-    nav2div.insertBefore(searchContainer, nav2div.querySelector(".profilediv"));
-
-    // --- Sidebar & Navigation Implementations ---
-
-    const homeView = document.getElementById("home-view");
-    const searchView = document.getElementById("search-view");
-
-    function showHome() {
-        if (homeView) homeView.style.display = "block";
-        if (searchView) searchView.style.display = "none";
-    }
-
-    function showSearch() {
-        if (homeView) homeView.style.display = "none";
-        if (searchView) searchView.style.display = "block";
-    }
-
-    // 1. Home Button
-    const homeBtn = document.getElementById("home-btn");
-    if (homeBtn) {
-        homeBtn.addEventListener("click", showHome);
-    }
-
-    // 1b. Back Arrow
-    const backArrow = document.querySelector(".backarrow");
-    if (backArrow) {
-        backArrow.style.cursor = "pointer";
-        backArrow.addEventListener("click", showHome);
-    }
-
-    // 2. Search Button
-    const searchBtn = document.getElementById("search-btn");
-    if (searchBtn) {
-        searchBtn.addEventListener("click", () => {
-            if (searchInput) {
-                searchInput.focus();
-            }
-        });
-    }
-
-    // 4. Handle Search Logic
-    searchInput.addEventListener("keypress", async (e) => {
-        if (e.key === "Enter") {
-            const query = searchInput.value;
-            if (!query) return;
-
-            showSearch(); // Switch to search view
-            if (searchView) searchView.innerHTML = "<h2 style='margin: 20px;'>Searching...</h2>";
-
-            try {
-                const res = await fetch(`http://localhost:3000/search?q=${encodeURIComponent(query)}`);
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    throw new Error(errorData.error || "Server returned an error");
-                }
-                const videos = await res.json();
-                renderResults(videos);
-            } catch (err) {
-                console.error(err);
-                if (searchView) searchView.innerHTML = `<h2>Error fetching results: ${err.message}</h2>`;
-            }
-        }
-    });
-
-    function renderResults(videos) {
-        // Ensure we are in search view
-        showSearch();
-
-        if (!searchView) return;
-        searchView.innerHTML = "<h2 style='margin: 20px;'>Search Results</h2>";
-
-        const cardsContainer = document.createElement("div");
-        cardsContainer.className = "cards";
-        cardsContainer.style.display = "flex";
-        cardsContainer.style.flexWrap = "wrap";
-        cardsContainer.style.gap = "20px";
-        cardsContainer.style.padding = "0 20px";
-
-        videos.forEach(video => {
-            const card = document.createElement("div");
-            card.className = "card-result";
-            card.innerHTML = `
-                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
-                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
-                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
-            `;
-
-            card.addEventListener("click", () => playVideo(video));
-            cardsContainer.appendChild(card);
-        });
-
-        searchView.appendChild(cardsContainer);
-    }
-
-    // 5. Play Video & Player Controls
     function playVideo(video) {
-        currentlyPlayingVideo = video;
-        const coverImg = document.querySelector(".playingsongimg img");
-        const titleElem = document.querySelector(".playingsonginfo .p1");
-        const artistElem = document.querySelector(".playingsonginfo .p2");
+        activeVideo = video;
 
-        if (coverImg) coverImg.src = video.thumbnail;
-        titleElem.innerHTML = `<a href="#">${video.title}</a>`;
-        artistElem.innerHTML = `<a href="#" class="opacity">${video.author}</a>`;
+        const img = document.querySelector(".playingsongimg img");
+        const title = document.querySelector(".playingsonginfo .p1");
+        const artist = document.querySelector(".playingsonginfo .p2");
 
-        // Update queue index if this video is in the queue
-        const idx = songQueue.findIndex(v => v.id === video.id);
-        if (idx !== -1) currentQueueIndex = idx;
+        if (img) img.src = video.thumbnail;
+        if (title) title.innerHTML = `<a href="#">${video.title}</a>`;
+        if (artist) artist.innerHTML = `<a href="#" class="opacity">${video.author}</a>`;
 
-        // Highlight the active card
-        highlightActiveCard(video.id);
+        const idx = queue.findIndex(v => v.id === video.id);
+        if (idx !== -1) queueIndex = idx;
 
-        // Update heart button state for this song
-        updateHeartButton(video.id);
+        if (ytPlayer) ytPlayer.loadVideoById(video.id);
 
-        // Refresh Queue panel if open
-        renderQueuePanel();
+        updateHeartUI(video.id);
+    }
 
-        // Check window.player
-        if (window.player && typeof window.player.loadVideoById === 'function') {
-            try {
-                window.player.loadVideoById(video.id);
-            } catch (error) {
-                console.error("Player error:", error);
-                showToast("Error playing video.", "error");
-            }
+    function nextTrack() {
+        if (queue.length === 0) return;
+
+        if (repeatState === "all") {
+            queueIndex = (queueIndex + 1) % queue.length;
         } else {
-            console.error("Player not initialized yet");
-            showToast("Player is loading... please try again.", "error");
+            if (queueIndex + 1 >= queue.length) return;
+            queueIndex++;
         }
+
+        playVideo(queue[queueIndex]);
     }
 
-    // Highlight the currently playing card
-    function highlightActiveCard(videoId) {
-        document.querySelectorAll(".card-result").forEach(c => c.classList.remove("card-active"));
-        const activeCard = document.querySelector(`.card-result[data-id="${videoId}"]`);
-        if (activeCard) activeCard.classList.add("card-active");
-    }
+    function previousTrack() {
+        if (!ytPlayer) return;
 
-    // Play the next track in the queue
-    function playNextTrack() {
-        if (songQueue.length === 0) return;
-        if (repeatMode === 'all') {
-            currentQueueIndex = (currentQueueIndex + 1) % songQueue.length;
-        } else {
-            // Don't loop if not repeating all; stop at end
-            if (currentQueueIndex + 1 >= songQueue.length) return;
-            currentQueueIndex = currentQueueIndex + 1;
-        }
-        playVideo(songQueue[currentQueueIndex]);
-    }
-
-    // Play the previous track in the queue
-    function playPrevTrack() {
-        if (songQueue.length === 0) return;
-        // If more than 3 seconds in, restart current track; otherwise go previous
-        if (window.player && window.player.getCurrentTime && window.player.getCurrentTime() > 3) {
-            window.player.seekTo(0, true);
-            return;
-        }
-        currentQueueIndex = (currentQueueIndex - 1 + songQueue.length) % songQueue.length;
-        playVideo(songQueue[currentQueueIndex]);
-    }
-
-    // --- Shuffle ---
-    const shuffleBtn = document.querySelector(".controls img[src*='player_icon1']");
-    if (shuffleBtn) {
-        shuffleBtn.style.cursor = "pointer";
-        shuffleBtn.addEventListener("click", () => {
-            isShuffled = !isShuffled;
-            if (isShuffled) {
-                // Save original order and shuffle
-                originalQueue = [...songQueue];
-                const playing = currentQueueIndex >= 0 ? songQueue[currentQueueIndex] : null;
-                const rest = songQueue.filter((_, i) => i !== currentQueueIndex);
-                // Fisher-Yates shuffle
-                for (let i = rest.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [rest[i], rest[j]] = [rest[j], rest[i]];
-                }
-                songQueue = playing ? [playing, ...rest] : rest;
-                currentQueueIndex = playing ? 0 : -1;
-                shuffleBtn.style.filter = 'invert(1) sepia(1) saturate(5) hue-rotate(90deg)';
-                shuffleBtn.title = 'Shuffle: ON';
-            } else {
-                // Restore original order
-                const playing = currentQueueIndex >= 0 ? songQueue[currentQueueIndex] : null;
-                songQueue = [...originalQueue];
-                currentQueueIndex = playing ? songQueue.findIndex(v => v.id === playing.id) : -1;
-                shuffleBtn.style.filter = '';
-                shuffleBtn.title = 'Shuffle: OFF';
-            }
-        });
-    }
-
-    // --- Repeat ---
-    const repeatBtn = document.querySelector(".controls .fa-rotate-right");
-    if (repeatBtn) {
-        repeatBtn.style.cursor = "pointer";
-        repeatBtn.title = 'Repeat: Off';
-        repeatBtn.addEventListener("click", () => {
-            if (repeatMode === 'none') {
-                repeatMode = 'all';
-                repeatBtn.style.color = '#1ed760';
-                repeatBtn.title = 'Repeat: All';
-            } else if (repeatMode === 'all') {
-                repeatMode = 'one';
-                repeatBtn.style.color = '#1ed760';
-                repeatBtn.title = 'Repeat: One';
-                // Show a small "1" badge visually
-                repeatBtn.dataset.repeat = '1';
-            } else {
-                repeatMode = 'none';
-                repeatBtn.style.color = '';
-                repeatBtn.title = 'Repeat: Off';
-                delete repeatBtn.dataset.repeat;
-            }
-        });
-    }
-
-    // 6. Play/Pause, Seek & Prev/Next Controls
-    const playBtn = document.querySelector(".controls .play");
-    if (playBtn) {
-        playBtn.addEventListener("click", togglePlayPause);
-    }
-
-    function togglePlayPause() {
-        if (!window.player) return;
-        const state = window.player.getPlayerState();
-        if (state === YT.PlayerState.PLAYING) {
-            window.player.pauseVideo();
-        } else {
-            window.player.playVideo();
-        }
-    }
-
-    // Previous track (player_icon2)
-    const prevBtn = document.querySelector(".controls img[src*='player_icon2']");
-    if (prevBtn) {
-        prevBtn.style.cursor = "pointer";
-        prevBtn.addEventListener("click", playPrevTrack);
-    }
-
-    // Next track (player_icon4)
-    const nextBtn = document.querySelector(".controls img[src*='player_icon4']");
-    if (nextBtn) {
-        nextBtn.style.cursor = "pointer";
-        nextBtn.addEventListener("click", playNextTrack);
-    }
-
-    const progressBar = document.querySelector(".musictrack .track");
-    if (progressBar) {
-        progressBar.addEventListener("input", (e) => {
-            if (!window.player) return;
-            const duration = window.player.getDuration();
-            const seekTo = (e.target.value / 100) * duration;
-            window.player.seekTo(seekTo, true);
-        });
-    }
-
-    // ─── Mute Toggle ────────────────────────────────────────────────────────
-    const muteBtn = document.getElementById("mute-btn");
-    let isMuted = false;
-    let volumeBeforeMute = 100;
-    if (muteBtn) {
-        muteBtn.addEventListener("click", () => {
-            if (!window.player) return;
-            isMuted = !isMuted;
-            if (isMuted) {
-                volumeBeforeMute = window.player.getVolume();
-                window.player.setVolume(0);
-                muteBtn.classList.add("muted");
-                // swap icon
-                muteBtn.className = muteBtn.className.replace('fa-volume-low', 'fa-volume-xmark');
-                showToast("Muted");
-            } else {
-                window.player.setVolume(volumeBeforeMute);
-                muteBtn.classList.remove("muted");
-                muteBtn.className = muteBtn.className.replace('fa-volume-xmark', 'fa-volume-low');
-                showToast("Unmuted");
-            }
-        });
-    }
-
-    // ─── Heart / Like Button ────────────────────────────────────────────────
-    let likedSongs = JSON.parse(localStorage.getItem("spotify_liked_songs")) || {};
-    let currentlyPlayingVideo = null; // track what's currently loaded
-
-    function savelikedSongs() {
-        localStorage.setItem("spotify_liked_songs", JSON.stringify(likedSongs));
-        updateLikedSongsCount();
-    }
-
-    function updateLikedSongsCount() {
-        const countEl = document.getElementById("liked-songs-count");
-        if (!countEl) return;
-        const n = Object.keys(likedSongs).length;
-        countEl.textContent = `${n} song${n !== 1 ? 's' : ''}`;
-    }
-
-    // Show Liked Songs view
-    function showLikedSongs() {
-        showSearch(); // reuse the search-view panel as a generic content panel
-        if (!searchView) return;
-
-        const songs = Object.values(likedSongs);
-        searchView.innerHTML = `
-            <div style="padding: 24px;">
-                <div style="display:flex; align-items:center; gap:20px; margin-bottom:28px;">
-                    <div style="width:80px; height:80px; border-radius:8px; background: linear-gradient(135deg, #4b0082, #1ed760); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                        <i class="fa-solid fa-heart" style="color:white; font-size:32px;"></i>
-                    </div>
-                    <div>
-                        <p style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; margin-bottom:4px;">Playlist</p>
-                        <h1 style="font-size:2rem; font-weight:800; color:white; margin:0 0 6px;">Liked Songs</h1>
-                        <p style="color:#a7a7a7; font-size:13px;">${songs.length} song${songs.length !== 1 ? 's' : ''}</p>
-                    </div>
-                </div>
-                <div id="liked-songs-cards" class="cards" style="display:flex; flex-wrap:wrap; gap:16px;"></div>
-            </div>
-        `;
-
-        const container = document.getElementById("liked-songs-cards");
-        if (songs.length === 0) {
-            container.innerHTML = `<p style="color:#a7a7a7; padding:8px;">No liked songs yet. Hit the <i class="fa-regular fa-heart"></i> while a song is playing!</p>`;
+        if (ytPlayer.getCurrentTime() > 3) {
+            ytPlayer.seekTo(0, true);
             return;
         }
 
-        songs.forEach(video => {
-            const card = document.createElement("div");
-            card.className = "card-result";
-            card.dataset.id = video.id;
-            card.innerHTML = `
-                <img src="${video.thumbnail}" style="width:100%; border-radius:4px; aspect-ratio:1; object-fit:cover; margin-bottom:12px;">
-                <h3 style="font-size:13px; font-weight:700; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white;">${video.title}</h3>
-                <p style="font-size:11px; color:#a7a7a7;">${video.author}</p>
-                <button class="remove-liked-btn" data-id="${video.id}" style="position:absolute; top:8px; right:8px; background:transparent; border:none; cursor:pointer; color:#1ed760; font-size:16px; display:none;" title="Remove from Liked Songs">
-                    <i class="fa-solid fa-heart"></i>
-                </button>
-            `;
-            const removeBtn = card.querySelector(".remove-liked-btn");
-            card.addEventListener("mouseenter", () => removeBtn.style.display = "block");
-            card.addEventListener("mouseleave", () => removeBtn.style.display = "none");
-            removeBtn.addEventListener("click", e => {
-                e.stopPropagation();
-                delete likedSongs[video.id];
-                savelikedSongs();
-                updateHeartButton(video.id);
-                showToast("Removed from Liked Songs");
-                showLikedSongs(); // refresh the view
-            });
-            card.addEventListener("click", () => playVideo(video));
-            container.appendChild(card);
-        });
+        queueIndex = (queueIndex - 1 + queue.length) % queue.length;
+        playVideo(queue[queueIndex]);
     }
 
-    // Liked Songs sidebar button
-    const likedSongsItem = document.getElementById("liked-songs-item");
-    if (likedSongsItem) likedSongsItem.addEventListener("click", showLikedSongs);
+    /* =========================================================
+       LIKE SYSTEM
+    ========================================================== */
 
-    // Set initial count
-    updateLikedSongsCount();
+    function saveLikes() {
+        localStorage.setItem("spotify_liked_songs", JSON.stringify(likedMap));
+        updateLikeCount();
+    }
 
-    function updateHeartButton(videoId) {
-        const heartIcon = document.getElementById("heart-btn");
-        if (!heartIcon) return;
-        if (likedSongs[videoId]) {
-            heartIcon.classList.remove("fa-regular");
-            heartIcon.classList.add("fa-solid", "liked");
+    function updateLikeCount() {
+        const el = document.getElementById("liked-songs-count");
+        if (!el) return;
+
+        const n = Object.keys(likedMap).length;
+        el.textContent = `${n} song${n !== 1 ? "s" : ""}`;
+    }
+
+    function updateHeartUI(id) {
+        const heart = document.getElementById("heart-btn");
+        if (!heart) return;
+
+        if (likedMap[id]) {
+            heart.classList.remove("fa-regular");
+            heart.classList.add("fa-solid");
         } else {
-            heartIcon.classList.remove("fa-solid", "liked");
-            heartIcon.classList.add("fa-regular");
+            heart.classList.remove("fa-solid");
+            heart.classList.add("fa-regular");
         }
     }
 
-    const heartBtn = document.getElementById("heart-btn");
-    if (heartBtn) {
-        heartBtn.addEventListener("click", () => {
-            if (!currentlyPlayingVideo) {
-                showToast("Nothing is playing.");
-                return;
-            }
-            const id = currentlyPlayingVideo.id;
-            if (likedSongs[id]) {
-                delete likedSongs[id];
-                savelikedSongs();
-                updateHeartButton(id);
-                showToast("Removed from Liked Songs");
-            } else {
-                likedSongs[id] = currentlyPlayingVideo;
-                savelikedSongs();
-                updateHeartButton(id);
-                showToast("Added to Liked Songs ♪", "success");
-            }
-        });
-    }
-
-    // Plus-to-playlist button (in player bar)
-    const plusToPlaylistBtn = document.getElementById("plus-to-playlist-btn");
-    if (plusToPlaylistBtn) {
-        plusToPlaylistBtn.addEventListener("click", () => {
-            if (!currentlyPlayingVideo) {
-                showToast("Nothing is playing.");
-                return;
-            }
-            addToPlaylist(currentlyPlayingVideo);
-        });
-    }
-
-    // ─── Now Playing Queue Panel ─────────────────────────────────────────────
-    const queuePanel = document.getElementById("queue-panel");
-    const queueList = document.getElementById("queue-list");
-    const queueToggleBtn = document.getElementById("queue-toggle-btn");
-    const closeQueueBtn = document.getElementById("close-queue-btn");
-    const queueOverlay = document.getElementById("queue-overlay");
-    let queueOpen = false;
-
-    function openQueuePanel() {
-        queueOpen = true;
-        if (queuePanel) queuePanel.classList.add("open");
-        if (queueOverlay) queueOverlay.style.display = "block";
-        if (queueToggleBtn) queueToggleBtn.classList.add("queue-btn-active");
-        renderQueuePanel();
-    }
-    function closeQueuePanel() {
-        queueOpen = false;
-        if (queuePanel) queuePanel.classList.remove("open");
-        if (queueOverlay) queueOverlay.style.display = "none";
-        if (queueToggleBtn) queueToggleBtn.classList.remove("queue-btn-active");
-    }
-    function renderQueuePanel() {
-        if (!queueList || !queueOpen) return;
-        queueList.innerHTML = "";
-
-        if (songQueue.length === 0) {
-            queueList.innerHTML = `<p style="padding:20px; color:#a7a7a7; text-align:center; font-size:13px;">No songs in queue.<br>Search and play music to build your queue.</p>`;
+    document.getElementById("heart-btn")?.addEventListener("click", () => {
+        if (!activeVideo) {
+            notify("No track playing");
             return;
         }
 
-        // Section: Now Playing
-        if (currentQueueIndex >= 0 && currentQueueIndex < songQueue.length) {
-            const header = document.createElement("p");
-            header.style.cssText = "padding:8px 24px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; font-weight:700;";
-            header.textContent = "Now playing";
-            queueList.appendChild(header);
-            queueList.appendChild(buildQueueItem(songQueue[currentQueueIndex], currentQueueIndex, true));
+        const id = activeVideo.id;
 
-            // Section: Next up
-            const nextItems = songQueue.slice(currentQueueIndex + 1);
-            if (nextItems.length > 0) {
-                const nextHeader = document.createElement("p");
-                nextHeader.style.cssText = "padding:16px 24px 8px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#a7a7a7; font-weight:700;";
-                nextHeader.textContent = "Next in queue";
-                queueList.appendChild(nextHeader);
-                nextItems.forEach((v, i) => {
-                    queueList.appendChild(buildQueueItem(v, currentQueueIndex + 1 + i, false));
-                });
-            }
+        if (likedMap[id]) {
+            delete likedMap[id];
+            notify("Removed from liked songs");
         } else {
-            // No current track known — show all
-            songQueue.forEach((v, i) => {
-                queueList.appendChild(buildQueueItem(v, i, false));
-            });
+            likedMap[id] = activeVideo;
+            notify("Added to liked songs", "success");
         }
-    }
-    function buildQueueItem(video, idx, isActive) {
-        const item = document.createElement("div");
-        item.className = "queue-item" + (isActive ? " queue-active" : "");
 
-        item.innerHTML = `
-            <span class="queue-item-index">${isActive ? '<i class="fa-solid fa-volume-up" style="font-size:10px; color:#1ed760;"></i>' : idx + 1}</span>
-            <img src="${video.thumbnail}" alt="">
-            <div class="queue-item-info">
-                <div class="queue-item-title">${video.title}</div>
-                <div class="queue-item-artist">${video.author}</div>
-            </div>
-        `;
-        item.addEventListener("click", () => {
-            currentQueueIndex = idx;
-            playVideo(video);
-        });
-        return item;
-    }
-
-    if (queueToggleBtn) queueToggleBtn.addEventListener("click", () => queueOpen ? closeQueuePanel() : openQueuePanel());
-    if (closeQueueBtn) closeQueueBtn.addEventListener("click", closeQueuePanel);
-    if (queueOverlay) queueOverlay.addEventListener("click", closeQueuePanel);
-
-    // ─── Keyboard Shortcuts ──────────────────────────────────────────────────
-    document.addEventListener("keydown", (e) => {
-        // Don't fire shortcuts if user is typing in a text input / textarea
-        const tag = document.activeElement.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-        switch (e.code) {
-            case "Space":
-                e.preventDefault();
-                togglePlayPause();
-                showShortcutHint("Space — Play / Pause");
-                break;
-            case "ArrowRight":
-                e.preventDefault();
-                playNextTrack();
-                showShortcutHint("→ Next track");
-                break;
-            case "ArrowLeft":
-                e.preventDefault();
-                playPrevTrack();
-                showShortcutHint("← Previous track");
-                break;
-            case "KeyM":
-                if (muteBtn) muteBtn.click();
-                showShortcutHint("M — Mute / Unmute");
-                break;
-            case "KeyQ":
-                queueOpen ? closeQueuePanel() : openQueuePanel();
-                showShortcutHint("Q — Queue panel");
-                break;
-        }
+        saveLikes();
+        updateHeartUI(id);
     });
 
-    // Keyboard shortcut hint (transient label)
-    let shortcutHintEl = null;
-    let shortcutTimeout = null;
-    function showShortcutHint(text) {
-        if (!shortcutHintEl) {
-            shortcutHintEl = document.createElement("div");
-            shortcutHintEl.className = "shortcut-hint";
-            document.body.appendChild(shortcutHintEl);
-        }
-        shortcutHintEl.textContent = text;
-        shortcutHintEl.classList.add("visible");
-        clearTimeout(shortcutTimeout);
-        shortcutTimeout = setTimeout(() => shortcutHintEl.classList.remove("visible"), 1200);
-    }
+    updateLikeCount();
 
-    // (Dynamic player creation removed - using static HTML)
+    /* =========================================================
+       PLAYLIST SYSTEM
+    ========================================================== */
 
-    // --- Playlist & LocalStorage Logic ---
-
-    // 1. Initialize Playlists
-    let playlists = JSON.parse(localStorage.getItem("spotify_playlists")) || {};
-
-    // 2. Function to Save Playlists
-    function savePlaylists() {
+    function savePlaylistData() {
         localStorage.setItem("spotify_playlists", JSON.stringify(playlists));
     }
 
-    // 3. Render Sidebar Playlists on Load
-    function renderSidebarPlaylists() {
-        if (!playlistList) return;
-        playlistList.innerHTML = ""; // Clear existing
-        Object.keys(playlists).forEach(name => {
-            const playlistItem = document.createElement("div");
-            playlistItem.className = "sidebar-playlist-item";
-
-            const nameSpan = document.createElement("span");
-            nameSpan.innerText = name;
-            nameSpan.className = "sidebar-playlist-name";
-
-            const deleteBtn = document.createElement("button");
-            deleteBtn.innerHTML = "&times;";
-            deleteBtn.className = "sidebar-playlist-delete";
-            deleteBtn.title = `Delete playlist "${name}"`;
-
-            deleteBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                if (confirm(`Delete playlist "${name}"?`)) {
-                    delete playlists[name];
-                    savePlaylists();
-                    renderSidebarPlaylists();
-                    // If the playlist was being shown, go back to home
-                    showHome();
-                }
-            });
-
-            playlistItem.appendChild(nameSpan);
-            playlistItem.appendChild(deleteBtn);
-            playlistItem.onclick = () => showPlaylist(name);
-
-            playlistList.appendChild(playlistItem);
-        });
-    }
-
-    // 4. Create Playlist Logic
-    const createPlaylistBtn = document.getElementById("create-playlist-btn");
-    const plusIcon = document.getElementById("plus-icon");
-    const playlistList = document.getElementById("playlist-list");
-
     function createPlaylist() {
-        const name = prompt("Enter a name for your playlist:");
-        if (name) {
-            if (playlists[name]) {
-                alert("Playlist already exists!");
-                return;
-            }
-            playlists[name] = []; // Initialize empty array for songs
-            savePlaylists();
-            renderSidebarPlaylists();
-        }
-    }
+        const name = prompt("Playlist name:");
+        if (!name) return;
 
-    if (createPlaylistBtn) createPlaylistBtn.addEventListener("click", createPlaylist);
-    if (plusIcon) plusIcon.addEventListener("click", createPlaylist);
-
-    // Initial Render
-    renderSidebarPlaylists();
-
-    // 5. Add Song to Playlist Function (with Modal)
-    function addToPlaylist(video) {
-        const modal = document.getElementById("playlist-modal");
-        const modalList = document.getElementById("modal-playlist-list");
-        const closeBtn = document.querySelector(".close-modal");
-
-        if (!modal || !modalList) return;
-
-        const playlistNames = Object.keys(playlists);
-        if (playlistNames.length === 0) {
-            showToast("No playlists yet — create one in the sidebar!", "error");
+        if (playlists[name]) {
+            alert("Playlist already exists");
             return;
         }
 
-        modalList.innerHTML = ""; // Clear previous options
-
-        playlistNames.forEach(name => {
-            const btn = document.createElement("button");
-            btn.innerText = name;
-            btn.style.padding = "10px";
-            btn.style.backgroundColor = "#1db954";
-            btn.style.border = "none";
-            btn.style.borderRadius = "20px";
-            btn.style.color = "white";
-            btn.style.cursor = "pointer";
-            btn.style.fontWeight = "bold";
-
-            btn.onclick = () => {
-                const exists = playlists[name].find(s => s.id === video.id);
-                if (exists) {
-                    showToast(`Already in "${name}"`, "error");
-                } else {
-                    playlists[name].push(video);
-                    savePlaylists();
-                    modal.style.display = "none";
-                    showToast(`Added to "${name}" ✓`, "success");
-                }
-            };
-            modalList.appendChild(btn);
-        });
-
-        modal.style.display = "block";
-
-        closeBtn.onclick = function () {
-            modal.style.display = "none";
-        };
-
-        window.onclick = function (event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        };
+        playlists[name] = [];
+        savePlaylistData();
+        renderSidebarPlaylists();
     }
 
-    // --- Dynamic Home Content ---
-    async function loadHomeContent() {
-        const trendingContainer = document.querySelector("#section-trending .cards");
-        const topMixesContainer = document.querySelector("#section-top-mixes .cards");
+    function renderSidebarPlaylists() {
+        const container = document.getElementById("playlist-list");
+        if (!container) return;
 
-        if (!trendingContainer || !topMixesContainer) return;
-
-        // Fetch Trending
-        try {
-            const res1 = await fetch(`http://localhost:3000/search?q=Top+Songs+2024`);
-            const trendingVideos = await res1.json();
-            renderCardsToContainer(trendingVideos.slice(0, 10), trendingContainer);
-        } catch (e) {
-            console.error("Failed to load trending", e);
-        }
-
-        // Fetch Top Mixes
-        try {
-            const res2 = await fetch(`http://localhost:3000/search?q=Top+Music+Mixes`);
-            const mixVideos = await res2.json();
-            renderCardsToContainer(mixVideos.slice(0, 10), topMixesContainer);
-        } catch (e) {
-            console.error("Failed to load mixes", e);
-        }
-    }
-
-    function renderCardsToContainer(videos, container) {
         container.innerHTML = "";
 
-        // Merge these videos into the global queue (avoid duplicates)
-        videos.forEach(v => {
-            if (!songQueue.find(q => q.id === v.id)) songQueue.push(v);
-        });
+        Object.keys(playlists).forEach(name => {
+            const item = document.createElement("div");
+            item.className = "sidebar-playlist-item";
+            item.textContent = name;
 
-        videos.forEach(video => {
-            const card = document.createElement("div");
-            card.className = "card-result";
-            card.dataset.id = video.id; // for queue highlight
-
-            card.innerHTML = `
-                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
-                <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: white;">${video.title}</h3>
-                <p style="font-size: 12px; color: #a7a7a7;">${video.author}</p>
-                <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-weight:bold; font-size:18px; line-height:1;">+</button>
-            `;
-
-            const addBtn = card.querySelector(".add-btn");
-            card.addEventListener("mouseenter", () => addBtn.style.display = "block");
-            card.addEventListener("mouseleave", () => addBtn.style.display = "none");
-
-            addBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                addToPlaylist(video);
-            });
-
-            card.addEventListener("click", () => playVideo(video));
-            container.appendChild(card);
+            item.onclick = () => showPlaylist(name);
+            container.appendChild(item);
         });
     }
 
-    // Run on startup
-    loadHomeContent();
-
-    // 6. Show Playlist View (Updated to use new render helper if desired, but kept separate for now)
     function showPlaylist(name) {
-        showSearch();
-        if (!searchView) return;
+        const panel = document.getElementById("search-view");
+        if (!panel) return;
 
-        searchView.innerHTML = `<h2 style='margin: 20px;'>Playlist: ${name}</h2>`;
+        panel.innerHTML = `<h2 style="margin:20px;">Playlist: ${name}</h2>`;
 
-        const songs = playlists[name] || [];
-        if (songs.length === 0) {
-            searchView.innerHTML += `<p style='margin: 20px; color: #a7a7a7;'>This playlist is empty.</p>`;
+        playlists[name].forEach(video => {
+            const card = buildCard(video);
+            panel.appendChild(card);
+        });
+    }
+
+    function addToPlaylist(video) {
+        const names = Object.keys(playlists);
+        if (names.length === 0) {
+            notify("Create a playlist first", "error");
             return;
         }
 
-        const cardsContainer = document.createElement("div");
-        cardsContainer.className = "cards";
-        cardsContainer.style.display = "flex";
-        cardsContainer.style.flexWrap = "wrap";
-        cardsContainer.style.gap = "20px";
-        cardsContainer.style.padding = "0 20px";
+        const target = prompt(`Add to which playlist?\n${names.join("\n")}`);
+        if (!target || !playlists[target]) return;
 
-        // Reusing similar logic but vertical flow is fine here
-        songs.forEach((video, index) => {
-            const card = document.createElement("div");
-            // ... (Same card style as before) ...
-            card.className = "card-result";
-            // Inline styles removed to use CSS class .card-result
+        const exists = playlists[target].find(v => v.id === video.id);
+        if (exists) {
+            notify("Already exists", "error");
+            return;
+        }
 
-
-            // Hover effects handled by CSS
-
-
-            card.innerHTML = `
-                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
-                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
-                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
-            `;
-
-            card.addEventListener("click", (e) => {
-                playVideo(video);
-            });
-
-            cardsContainer.appendChild(card);
-        });
-
-        searchView.appendChild(cardsContainer);
+        playlists[target].push(video);
+        savePlaylistData();
+        notify(`Added to ${target}`, "success");
     }
 
-    // Update renderResults to include "Add to Playlist" button
-    renderResults = function (videos) {
-        showSearch();
-        if (!searchView) return;
-        searchView.innerHTML = "<h2 style='margin: 20px;'>Search Results</h2>";
+    /* =========================================================
+       SEARCH
+    ========================================================== */
 
-        const cardsContainer = document.createElement("div");
-        cardsContainer.className = "cards";
-        cardsContainer.style.display = "flex";
-        cardsContainer.style.flexWrap = "wrap";
-        cardsContainer.style.gap = "20px";
-        cardsContainer.style.padding = "0 20px";
+    const searchInput = document.getElementById("search-input");
 
-        // Replace queue with search results
-        songQueue = [...videos];
-        currentQueueIndex = -1;
+    async function executeSearch(query) {
+        const panel = document.getElementById("search-view");
+        if (!panel) return;
 
-        videos.forEach(video => {
-            const card = document.createElement("div");
-            card.className = "card-result";
-            card.dataset.id = video.id;
+        panel.innerHTML = "<h2 style='margin:20px;'>Searching...</h2>";
 
-            card.innerHTML = `
-                <img src="${video.thumbnail}" style="width: 100%; border-radius: 4px; aspect-ratio: 1; object-fit: cover; margin-bottom: 16px;">
-                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${video.title}</h3>
-                <p style="font-size: 14px; color: #a7a7a7;">${video.author}</p>
-                <button class="add-btn" style="position: absolute; top: 10px; right: 10px; background: #1bd760; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; display: none; font-size:18px; line-height:1; font-weight:bold;">+</button>
-            `;
+        try {
+            const res = await fetch(`http://localhost:3000/search?q=${encodeURIComponent(query)}`);
+            const results = await res.json();
 
-            const addBtn = card.querySelector(".add-btn");
-            card.addEventListener("mouseenter", () => addBtn.style.display = "block");
-            card.addEventListener("mouseleave", () => addBtn.style.display = "none");
+            queue = [...results];
+            queueIndex = -1;
 
-            addBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                addToPlaylist(video);
-            });
+            panel.innerHTML = "<h2 style='margin:20px;'>Search Results</h2>";
+            results.forEach(video => panel.appendChild(buildCard(video)));
 
-            card.addEventListener("click", () => playVideo(video));
-            cardsContainer.appendChild(card);
-        });
+        } catch (err) {
+            panel.innerHTML = `<h2>Error loading results</h2>`;
+        }
+    }
 
-        searchView.appendChild(cardsContainer);
-    };
+    searchInput?.addEventListener("keypress", e => {
+        if (e.key === "Enter" && searchInput.value) {
+            executeSearch(searchInput.value);
+        }
+    });
 
+    /* =========================================================
+       CARD BUILDER
+    ========================================================== */
+
+    function buildCard(video) {
+        const card = document.createElement("div");
+        card.className = "card-result";
+        card.dataset.id = video.id;
+
+        card.innerHTML = `
+            <img src="${video.thumbnail}" style="width:100%; border-radius:4px; aspect-ratio:1; object-fit:cover; margin-bottom:16px;">
+            <h3 style="font-size:16px; font-weight:700; margin-bottom:8px;">${video.title}</h3>
+            <p style="font-size:14px; color:#a7a7a7;">${video.author}</p>
+        `;
+
+        card.onclick = () => playVideo(video);
+
+        return card;
+    }
+
+    /* =========================================================
+       CONTROL BUTTON BINDINGS
+    ========================================================== */
+
+    document.querySelector(".controls .play")?.addEventListener("click", togglePlay);
+    document.querySelector(".controls img[src*='player_icon2']")?.addEventListener("click", previousTrack);
+    document.querySelector(".controls img[src*='player_icon4']")?.addEventListener("click", nextTrack);
+
+    document.getElementById("create-playlist-btn")?.addEventListener("click", createPlaylist);
+
+    renderSidebarPlaylists();
 });
